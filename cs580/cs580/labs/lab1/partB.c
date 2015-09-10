@@ -8,13 +8,9 @@ char c = (char)large_num;
 
 
 printf("\n \t Integer:  \t  %d",large_num);
-printf("\n \t Float with : \t %f",no1);
-printf("\n \t Float with : \t %e",no1);
+printf("\n \t Float : \t %f",no1);
+printf("\n \t Float : \t %e",no1);
 printf("\n \t Character: \t %c",c);
-
-
-
-
 
 
 

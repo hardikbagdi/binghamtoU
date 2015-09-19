@@ -126,7 +126,7 @@ for(;mask>0;mask=mask>>1){
 printf("\n\n\nRandom integer to Binary:");
 //randomize the seed. setting to system clock
 srand(time(0));
-random_number=rand();
+random_number=rand() % INT_MAX + INT_MIN;
 
 
 mask=1<<31;

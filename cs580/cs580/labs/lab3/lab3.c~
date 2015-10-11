@@ -41,7 +41,6 @@ while(haystack[i]!='\0'){
 				buffer[i]=haystack[copyi];
 				copyi++;i++;
 				}	
-				buffer[i]='\0';
 			//	buffer[j]=needle[j];
 			//	printf("\nstring found at %d",r);
 				//copy here;

@@ -1,0 +1,211 @@
+<html>
+<head>
+<title>Simple Math Quiz</title>
+</head>
+<style>
+td{
+	padding-bottom: 10px;
+	padding-right: 5px;
+	padding-left: 5px;
+}
+
+</style>
+<script type="text/javascript">
+var noOfRight=0;
+var noOfwrong=0;
+var totalAttempted=0;
+
+function intAdd () {
+	var x=Math.floor(Math.random() * 11) ;
+	var y= Math.floor(Math.random() * 11) ;
+	var string="Integer Addition\n"+x+"+"+y+"=";
+	var userInput= prompt(string);
+	var ans= x+y;
+		if(ans==userInput){
+			noOfRight++;
+			totalAttempted++;
+		alert("Correct answer.\nTotal:"+totalAttempted+"\nCorrect:"+noOfRight+"\nWrong:"+noOfwrong);
+
+		}
+		else{
+			noOfwrong++;
+			totalAttempted++;
+			alert("Wrong answer.\nThe correct answer is "+ans+"\nTotal:"+totalAttempted+"\nCorrect:"+noOfRight+"\nWrong:"+noOfwrong);
+		}
+	
+}
+
+
+	function intSub () {
+	var x=Math.floor(Math.random() * 11) ;
+	var y= Math.floor(Math.random() * 11) ;
+	var string="Integer Subtraction\n"+x+"-"+y+"=";
+	var userInput= prompt(string);
+	var ans= x-y;
+		if(ans==userInput){
+			noOfRight++;
+			totalAttempted++;
+		alert("Correct answer.\nTotal:"+totalAttempted+"\nCorrect:"+noOfRight+"\nWrong:"+noOfwrong);
+
+		}
+		else{
+			noOfwrong++;
+			totalAttempted++;
+			alert("Wrong answer.\nThe correct answer is "+ans+"\nTotal:"+totalAttempted+"\nCorrect:"+noOfRight+"\nWrong:"+noOfwrong);
+		}
+	
+	}
+	function floatSub () {
+	var x1=Math.floor(Math.random() * 11) ;
+	var y1= Math.floor(Math.random() * 11) ;
+	var x2=Math.floor(Math.random() * 11) ;
+	var y2= Math.floor(Math.random() * 11) ;
+
+	var x=x1+(0.01*x2) ;
+	var y= y1+(0.01*y2) ;
+	var string="Float Subtraction\n"+x+"-"+y+"=";
+	var userInput= prompt(string);
+	var ans= x-y;
+	ans=Number(ans.toFixed(2));
+		if(ans==userInput){
+			noOfRight++;
+			totalAttempted++;
+		alert("Correct answer.\nTotal:"+totalAttempted+"\nCorrect:"+noOfRight+"\nWrong:"+noOfwrong);
+
+		}
+		else{
+			noOfwrong++;
+			totalAttempted++;
+			alert("Wrong answer.\nThe correct answer is "+ans+"\nTotal:"+totalAttempted+"\nCorrect:"+noOfRight+"\nWrong:"+noOfwrong);
+		}
+	
+	}
+	function floatAdd () {
+	var x1=Math.floor(Math.random() * 11) ;
+	var y1= Math.floor(Math.random() * 11) ;
+	var x2=Math.floor(Math.random() * 11) ;
+	var y2= Math.floor(Math.random() * 11) ;
+
+	var x=x1+(0.01*x2) ;
+	var y= y1+(0.01*y2) ;
+	var string="Float Addition\n"+x+"+"+y+"=";
+	var userInput= prompt(string);
+	var ans= x+y;
+	ans=Number(ans.toFixed(2));
+		if(ans==userInput){
+			noOfRight++;
+			totalAttempted++;
+		alert("Correct answer.\nTotal:"+totalAttempted+"\nCorrect:"+noOfRight+"\nWrong:"+noOfwrong);
+
+		}
+		else{
+			noOfwrong++;
+			totalAttempted++;
+			alert("Wrong answer.\nThe correct answer is "+ans+"\nTotal:"+totalAttempted+"\nCorrect:"+noOfRight+"\nWrong:"+noOfwrong);
+		}
+	
+	}
+
+	function complexAdd () {
+	var x1=Math.floor(Math.random() * 11) ;
+	var y1= Math.floor(Math.random() * 11) ;
+	var x2=Math.floor(Math.random() * 11) ;
+	var y2= Math.floor(Math.random() * 11) ;
+
+	
+	var string="Complex Addition\nExpected input format: x+yi\n("+x1+"+"+y1+"i)  +  ("+x2+"+"+y2+"i) =";
+	var userInput= prompt(string);
+	var res = userInput.split("+");
+	userX=res[0];
+	userY=res[1].substring(0,res[1].indexOf("i"));
+	var correctX=x1+x2;
+	var correctY=y1+y2;
+		if(userX==correctX && userY==correctY){
+			noOfRight++;
+			totalAttempted++;
+		alert("Correct answer.\nTotal:"+totalAttempted+"\nCorrect:"+noOfRight+"\nWrong:"+noOfwrong);
+
+		}
+		else{
+			noOfwrong++;
+			totalAttempted++;
+			alert("Wrong answer.\nThe correct answer is ("+correctX+"+"+correctY+"i)\nTotal:"+totalAttempted+"\nCorrect:"+noOfRight+"\nWrong:"+noOfwrong);
+		}
+	
+	}
+
+	function complexSub () {
+	var x1=Math.floor(Math.random() * 11) ;
+	var y1= Math.floor(Math.random() * 11) ;
+	var x2=Math.floor(Math.random() * 11) ;
+	var y2= Math.floor(Math.random() * 11) ;
+	var userX,userY,res;
+	var signFlag="+";
+	var string="Complex Addition\nExpected input format: x+yi\n("+x1+"+"+y1+"i)  -  ("+x2+"+"+y2+"i) =";
+	var userInput= prompt(string);
+	if(userInput.indexOf("+")==-1){
+		signFlag="-";
+		res = userInput.split("-");
+	userX=res[0];
+	userY=res[1].substring(0,res[1].indexOf("i"));
+	userY=-userY;
+	}
+		else{
+	 res = userInput.split("+");
+	userX=res[0];
+	userY=res[1].substring(0,res[1].indexOf("i"));
+	}
+	var correctX=x1-x2;
+	var correctY=y1-y2;
+		if(userX==correctX && userY==correctY){
+			noOfRight++;
+			totalAttempted++;
+		alert("Correct answer.\nTotal:"+totalAttempted+"\nCorrect:"+noOfRight+"\nWrong:"+noOfwrong);
+
+		}
+		else{
+			noOfwrong++;
+			totalAttempted++;
+			alert("Wrong answer.\nThe correct answer is ("+correctX+signFlag+correctY+"i)\nTotal:"+totalAttempted+"\nCorrect:"+noOfRight+"\nWrong:"+noOfwrong);
+		}
+	
+	}
+
+function checkScore () {
+		var result= "Your Stats:\nTotal:"+totalAttempted+"\nCorrect:"+noOfRight+"\nWrong:"+noOfwrong;
+		alert(result);
+	}
+function resetScore () {
+	noOfwrong=0;
+	noOfRight=0;
+	totalAttempted=0;
+}
+</script>
+
+<body>
+	<center>
+<br>
+<h1>Simple Math Quiz</h1>
+<table>
+	<tr>
+		<td><button onclick="intAdd()">Integer Addition</button></td>
+		<td><button onclick="intSub()">Integer Subtraction</button></td>
+	</tr>
+	<tr>
+		<td><button onclick="floatAdd()">Float Addition</button></td>
+		<td><button onclick="floatSub()">Float Subtraction</button></td>
+	</tr>
+	<tr>
+		<td><button onclick="complexAdd()">Complex Addition</button></td>
+		<td><button onclick="complexSub()">Complex Subtraction</button></td>
+	</tr>
+	<tr>
+		<td><button onclick="checkScore()">Check score</button></td>
+		<td><button onclick="resetScore()">Reset Score</button></td>
+	</tr>
+
+</table>
+</center>
+</body>
+
+</html>

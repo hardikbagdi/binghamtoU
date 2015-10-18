@@ -38,7 +38,7 @@ return *answer;
 }
 
 void printTime(struct Time t){
-printf("\nTime: %d hours, %d minutes, %d seconds\n",t.hours,t.minutes,t.seconds);
+printf("\nTime: %02d hours, %02d minutes, %02d seconds\t(%02d:%02d:%02d)\n",t.hours,t.minutes,t.seconds,t.hours,t.minutes,t.seconds);
 }
 
 

@@ -1,7 +1,5 @@
-all: lab4 tournament
-lab3: lab4.c
-	gcc lab4.c -o lab4
-tournament:	tournament.c
-	gcc tournament.c -o tournament
+all: lab5
+lab4: lab5.c
+	gcc lab5.c -o lab5
 clean:
-	rm lab4 tournament
+	rm lab5

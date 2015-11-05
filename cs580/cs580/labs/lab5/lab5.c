@@ -75,11 +75,11 @@ struct Name jediName(struct Name name)
 	char* saveFirst=name.first_name;
 	char* saveLast=name.last_name;
 	int firstlen=0,lastlen=0;
-	while(*saveFirst!='\0')
+	while(*saveFirst!='\0'&& *saveFirst!=' ')
 	{
 		firstlen++;saveFirst++;
 	}
-	while(*saveLast!='\0')
+	while(*saveLast!='\0' &&  *saveLast!=' ')
 	{
 		lastlen++;saveLast++;
 	}

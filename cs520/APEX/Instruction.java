@@ -1,5 +1,10 @@
-enum InstructionType {ADD,SUB,MUL,MOVC,MOV,AND,OR,XOR,LOAD,STORE,BZ,BNZ,JUMP,BAL,HALT}
+enum InstructionType {ADD,SUB,MUL,AND,OR,XOR,MOVC,LOAD,STORE,BZ,BNZ,JUMP,BAL,HALT}
 
+/*
+MOVC only in WB
+LOAD,STORE-MEM and WB
+JUMP,BZ,BNZ,BAL resolved in EX
+*/
 public class Instruction{
 		//enum type{MOV,JUMP};
 		//falg to detect if contains any data or not
@@ -41,5 +46,9 @@ public class Instruction{
 	public void printRaw(){
 
 		System.out.println(rawString);
+	}
+	public String toString(){
+
+		return (rawString);
 	}
 	}

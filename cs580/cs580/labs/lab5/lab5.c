@@ -33,7 +33,7 @@ char* jediName_old(char* first, char* last)
 
 	//printf("first:%s\n",first);
 	char *answer=NULL;
-	answer = (char*)allocate(6);
+	answer = allocate(6);
 	if(answer==NULL)
 		{
 			printf("\nMemory allocation failed\n");
@@ -86,7 +86,7 @@ struct Name jediName(struct Name name)
 
 	//printf("first:%s\n",first);
 	char *answer=NULL;
-	answer = (char*)allocate(6);
+	answer = allocate(6);
 	if(answer==NULL)
 	{
 		printf("\nMemory allocation failed\n");
@@ -146,8 +146,8 @@ int main()
 	while(fgets(fullname, 100, file))
 	{
 		count++;
-		firstname=(char*)allocate(50);
-		lastname=(char*)allocate(50);
+		firstname=allocate(50);
+		lastname=allocate(50);
 		//name=(struct Name*)allocate(sizeof(struct Name));
 		name.first_name=firstname;
 		name.last_name=lastname;

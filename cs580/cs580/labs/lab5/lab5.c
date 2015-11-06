@@ -22,18 +22,19 @@ void * deallocate(void *p, int size)
 	//printf("\n-->Deallcoated. Total:%d", heap_usage);
 	return NULL;
 }
+/*
 char* jediName_old(char* first, char* last)
 {
 	//printf("%s",first);
 	char* saveFirst=first;
 	char* saveLast=last;
 	int firstlen=0,lastlen=0;
-	while(*saveFirst!='\0'){firstlen++;saveFirst++;}
+	while(*saveFirst!='\0' || *saveFirst!=' ' ){firstlen++;saveFirst++;}
 	while(*saveLast!='\0'){lastlen++;saveLast++;}
 
 	//printf("first:%s\n",first);
 	char *answer=NULL;
-	answer = allocate(6);
+	answer = (char*)allocate(6);
 	if(answer==NULL)
 		{
 			printf("\nMemory allocation failed\n");
@@ -66,10 +67,11 @@ char* jediName_old(char* first, char* last)
 	}
 	//printf("\nanswer:%s\n",saveAnswer);
 }
-
+*/
 
 struct Name jediName(struct Name name)
 {
+	int i=0,j=0;
 	char* first=name.first_name;
 	char* last=name.last_name;
 	char* saveFirst=name.first_name;
@@ -86,7 +88,7 @@ struct Name jediName(struct Name name)
 
 	//printf("first:%s\n",first);
 	char *answer=NULL;
-	answer = allocate(6);
+	answer = (char*)allocate(6);
 	if(answer==NULL)
 	{
 		printf("\nMemory allocation failed\n");
@@ -111,19 +113,22 @@ struct Name jediName(struct Name name)
 		*answer='\0';
 	}
 	else
-	{
-		*answer='A';
-		answer++;
-		*answer='J';
-		answer++;
-		*answer='E';
-		answer++;
-		*answer='D';
-		answer++;
-		*answer='I';
-		answer++;
-		*answer='\0';
-		//printf("too short");
+	{	//printf("%d:%d",firstlen,lastlen);
+		if(lastlen>=4){memcpy(answer,last,3);answer+=3;
+		}
+		else{
+			//printf("\ns0:%d\n",lastlen);
+			memcpy(answer,last,lastlen-1);answer+=lastlen-1;
+			}
+		
+		if(firstlen>=2){
+		//printf("\ns1\n");
+		memcpy(answer,first,2);answer+=2;
+		}
+		else{
+		//printf("\ns2\n");
+		memcpy(answer,first,firstlen);answer+=firstlen;
+		}
 	}
 	//printf("\nanswer:%s\n",saveAnswer);
 	name.jedi_name=saveAnswer;
@@ -146,8 +151,8 @@ int main()
 	while(fgets(fullname, 100, file))
 	{
 		count++;
-		firstname=allocate(50);
-		lastname=allocate(50);
+		firstname=(char*)allocate(50);
+		lastname=(char*)allocate(50);
 		//name=(struct Name*)allocate(sizeof(struct Name));
 		name.first_name=firstname;
 		name.last_name=lastname;

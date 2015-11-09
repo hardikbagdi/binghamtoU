@@ -1,7 +1,9 @@
 /*
 ToDo's
+-EOF loop problem
 -handle memory dependecy.
 -BAL R1,R2, #literal moves Return Address(next address) to R1 and goes to R2+literal.
+-One stage in Decode to read after WB.
 */
 import java.util.*;
 import java.io.*;
@@ -92,9 +94,9 @@ public class APEX{
 
 	public void doFetch(){
 		//	System.out.println("-->(from fetch)value of decode stall"+checkDecodeStall());
-		if(flagEND) inFetch=null;
 		if(stalled ) return;
 			inFetchtoNext=inFetch;
+		if(flagEND) inFetch=null;
 		//	if(checkDecodeStall(inFetchtoNext)) return;
 		inFetch=this.instructions[GlobalPC-20000];
 		System.out.print(" Fetch ");inFetch.printRaw();
@@ -104,8 +106,8 @@ public class APEX{
 				GlobalPC++;
 		}
 		else{
-			if(!flagEND)GlobalPC++;
-				flagEND=true; // once set, never increment PC. means EOF reached and PC will point to null
+			if(!flagEND){GlobalPC++;
+				flagEND=true;} // once set, never increment PC. means EOF reached and PC will point to null
 		}
 	}
 
@@ -308,7 +310,7 @@ public class APEX{
 		inMEMtoNext=inMEM;
 		inMEM=inEXtoNext;
 		System.out.print(" MEM "+inMEM+"\n");//inMEM.printRaw();
-		if(inMEM!=null){
+		if(inMEM!=null && inMEM.instr_id!=null){
 			System.out.println("Debugging NPE"+inMEM);
 			switch (inMEM.instr_id) {
 				//do nothing

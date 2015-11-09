@@ -4,6 +4,7 @@ ToDo's
 -handle memory dependecy.
 -BAL R1,R2, #literal moves Return Address(next address) to R1 and goes to R2+literal.
 -One stage in Decode to read after WB.
+-redirect all debug to err
 */
 import java.util.*;
 import java.io.*;
@@ -66,9 +67,9 @@ public class APEX{
 				System.exit(0);
 			}
 			doFetch();
-			System.out.println("=====decode starts");
+			System.err.println("=====decode starts");
 			doDecode();
-			System.out.println("=====decode ends");
+			System.err.println("=====decode ends");
 			doEX();
 			doMEM();
 			doWB();
@@ -99,7 +100,7 @@ public class APEX{
 		if(flagEND) inFetch=null;
 		//	if(checkDecodeStall(inFetchtoNext)) return;
 		inFetch=this.instructions[GlobalPC-20000];
-		System.out.print(" Fetch ");inFetch.printRaw();
+		System.err.print(" Fetch "+inFetch);//inFetch.printRaw();
 		//check if there is a next instruction. if yes, then incremenet the counter. else increment the counter 
 		// and set end of file flag. we will never increment the counter beyond this now.
 		if(instructions[GlobalPC-20000+1].contains){
@@ -112,15 +113,15 @@ public class APEX{
 	}
 
 	public void doDecode(){
-		System.out.println(inDecode);
+		System.err.println(inDecode);
 		if(inDecode!=null){
-		//System.out.print(" Decode "+inDecode+"\t\t\t"+inDecode.address);
+		//System.err.print(" Decode "+inDecode+"\t\t\t"+inDecode.address);
 			if(stalled){
 				inDecodetoNext=null;
-				//System.out.println("\n\n\n\n recheckingforstall\n\n\n\n"+inDecode);
+				//System.err.println("\n\n\n\n recheckingforstall\n\n\n\n"+inDecode);
 				if(checkDecodeStall(inDecode))
 					 return;							
-				//System.out.println("\n\n\n\n executing\n\n\n\n");
+				//System.err.println("\n\n\n\n executing\n\n\n\n");
 				stalled=false;
 		
 				if(inDecode.src1!=-1){
@@ -140,7 +141,7 @@ public class APEX{
 						
 				}
 		else{
-				System.out.println("\n\n\n\n no stall in last\n\n\n\n");
+				System.err.println("\n\n\n\n no stall in last\n\n\n\n");
 				inDecodetoNext=inDecode;
 				inDecode=inFetchtoNext;
 				if(checkDecodeStall(inDecode)){
@@ -169,14 +170,14 @@ public class APEX{
 			}
 		}
 	 else{
-			System.out.println("\n\n\n\nw\n\n\n\n");
+			System.err.println("\n\n\n\nw\n\n\n\n");
 			inDecodetoNext=inDecode;
 			inDecode=inFetchtoNext;
 			if(inDecode!=null){
-				//System.out.println("\n\n\n\nfirst\n\n\n\n");
+				//System.err.println("\n\n\n\nfirst\n\n\n\n");
 				if(checkDecodeStall(inDecode)){
 					
-					//System.out.println("\n\n\n\nfirst stalling\n\n\n\n");
+					//System.err.println("\n\n\n\nfirst stalling\n\n\n\n");
 					stalled=true;
 				}
 				else{
@@ -208,7 +209,7 @@ public class APEX{
 			inEXtoNext=inEX;		
 			inEX=inDecodetoNext;
 				if(inEX!=null && inEX.instr_id!=null){
-			System.out.print(" EX ");inEX.printRaw();
+			System.err.print(" EX "+inEX);//inEX.printRaw();
 					switch (inEX.instr_id) {
 						//do nothing
 						case MOVC: 
@@ -261,21 +262,21 @@ public class APEX{
 	}
 	
 	public void AddFU(Instruction instruction){
-		System.out.println("in add fu");
+		System.err.println("in add fu");
 		int operand2=0;
 		operand2=  instruction.src2!= -1 ? instruction.src2_data : instruction.literal;
 		instruction.destination_data= instruction.src1_data+operand2;
 	}
 	
 	public void MulFU(Instruction instruction){
-		System.out.println("in Mul fu");
+		System.err.println("in Mul fu");
 		int operand2=0;
 		operand2=  instruction.src2!= -1 ? instruction.src2_data : instruction.literal;
 		instruction.destination_data= instruction.src1_data*operand2;
 	}
 	
 	public void SubFU(Instruction instruction){
-		System.out.println("in sub fu");
+		System.err.println("in sub fu");
 		int operand2=0;
 		operand2=  instruction.src2!= -1 ? instruction.src2_data : instruction.literal;
 		instruction.destination_data= instruction.src1_data-operand2;
@@ -283,7 +284,7 @@ public class APEX{
 	}
 
 	public void AndFU(Instruction instruction){
-		System.out.println("in AND fu");
+		System.err.println("in AND fu");
 		int operand2=0;
 		operand2=  instruction.src2!= -1 ? instruction.src2_data : instruction.literal;
 		instruction.destination_data= instruction.src1_data & operand2;
@@ -291,7 +292,7 @@ public class APEX{
 	}
 	
 	public void OrFU(Instruction instruction){
-		System.out.println("in OR fu");
+		System.err.println("in OR fu");
 		int operand2=0;
 		operand2=  instruction.src2!= -1 ? instruction.src2_data : instruction.literal;
 		instruction.destination_data= instruction.src1_data | operand2;
@@ -299,7 +300,7 @@ public class APEX{
 	}
 	
 	public void XorFU(Instruction instruction){
-		System.out.println("in XOR fu");
+		System.err.println("in XOR fu");
 		int operand2=0;
 		operand2=  instruction.src2!= -1 ? instruction.src2_data : instruction.literal;
 		instruction.destination_data= instruction.src1_data ^ operand2;
@@ -309,9 +310,9 @@ public class APEX{
 	public void doMEM(){
 		inMEMtoNext=inMEM;
 		inMEM=inEXtoNext;
-		System.out.print(" MEM "+inMEM+"\n");//inMEM.printRaw();
+		System.err.print(" MEM "+inMEM+"\n");//inMEM.printRaw();
 		if(inMEM!=null && inMEM.instr_id!=null){
-			System.out.println("Debugging NPE"+inMEM);
+			System.err.println("Debugging NPE"+inMEM);
 			switch (inMEM.instr_id) {
 				//do nothing
 				case MOVC: 	inMEM.destination_data=inMEM.literal;
@@ -341,7 +342,7 @@ public class APEX{
 		if(inWB!=null){
 	
 			//code to writeback
-				System.out.print(" WB "+inWB+"\n");//inWB.printRaw();
+				System.err.print(" WB "+inWB+"\n");//inWB.printRaw();
 			//move last mem instrucion here
 				// perform check if not a store too :remainng
 			
@@ -395,7 +396,7 @@ public class APEX{
 	}
 	public void PrintMenu(){
 		System.out.println("\nOptions:\n");
-		System.out.println("1:\tSimulate: Performs initialization and simulate n cycles. \n");
+		System.out.println("1:\tSimulate: Simulate n cycles. \n");
 		System.out.println("2.\tDisplay: Content of all memory and other relevant info.");
 		System.out.print("3.\tShutDown.\nInput:\t");
 
@@ -486,21 +487,21 @@ public class APEX{
 		instruction.inst_name=tokenizer.nextToken(" ").trim();
 		instruction.instr_id= InstructionType.valueOf(instruction.inst_name);
 		if(instruction.instr_id==InstructionType.HALT) return;
-	// System.out.println("w"+instruction.instr_id+"w");
-	// System.out.println("w"+instruction.inst_name+"w");
+	// System.err.println("w"+instruction.instr_id+"w");
+	// System.err.println("w"+instruction.inst_name+"w");
 		instruction.destination=Integer.parseInt(tokenizer.nextToken(",").replace(" ","").substring(1) );
 		noOfOperands++;
-	//System.out.println(instruction.destination);
-	// System.out.println(tokenizer);
+	//System.err.println(instruction.destination);
+	// System.err.println(tokenizer);
 	//string.indexOf(",")
 
 		if(tokenizer.hasMoreTokens()){
 			String token = tokenizer.nextToken();
-	//	System.out.println("Src1:");
-	//	System.out.println(token);
+	//	System.err.println("Src1:");
+	//	System.err.println(token);
 			if(!token.contains("#")){
 				int src1= Integer.parseInt(token.replace(" ","").substring(1) );
-			// System.out.println(src1);
+			// System.err.println(src1);
 				instruction.src1=src1;
 				noOfOperands++;
 			}
@@ -510,29 +511,29 @@ public class APEX{
 		if(tokenizer.hasMoreTokens()){
 
 			String token = tokenizer.nextToken();
-		// System.out.println("Src2:");
-		//System.out.println(tokenizer.nextToken());
+		// System.err.println("Src2:");
+		//System.err.println(tokenizer.nextToken());
 			if(!token.contains("#")){
 				int src2= Integer.parseInt(token.replace(" ","").substring(1) );
-			// System.out.println(src2);
+			// System.err.println(src2);
 				instruction.src2=src2;
 				noOfOperands++;
 			}
 
 		}
-	// System.out.println("Searching for literal");
-	//System.out.println("# index"+string.indexOf("#"));
+	// System.err.println("Searching for literal");
+	//System.err.println("# index"+string.indexOf("#"));
 		if(string.indexOf("#")>0){
 			literal = Integer.parseInt(string.substring(string.indexOf("#")+1).trim());
 			instruction.literal=literal;
 			noOfOperands++;
-		// System.out.println("# value"+literal);
+		// System.err.println("# value"+literal);
 		}
 		instruction.noOfOperands=noOfOperands;
 		if(noOfOperands>3){
 			throw new Exception("No of operands more than possible.");
 		}
-	//System.out.println("Count of operands"+noOfOperands);
+	//System.err.println("Count of operands"+noOfOperands);
 	}
 	public void processInput(){
 		BufferedReader br;
@@ -564,8 +565,16 @@ public class APEX{
 
 	}
 	public static void main(String[] args){
+		try{
+			PrintStream ps = new PrintStream("log");
+			System.setErr(ps);
+		}
+		catch (Exception e) {
+			System.out.println("Log file doesn't exist");
+		}
+
 		APEX a= new APEX();
-	//System.err.println("QW");
+		//System.err.println("QW");
 		Scanner s= new Scanner(System.in);
 		a.processInput();
 		a.PrintMenuWithInit();
@@ -578,6 +587,7 @@ public class APEX{
 			a.PrintMenu();
 			if(a.userInput(s)==1)
 				a.processCycles(a.userInputCycles);
+			// a.displayAll();
 		}
 	}
 }

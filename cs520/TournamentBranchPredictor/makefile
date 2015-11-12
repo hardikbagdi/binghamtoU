@@ -1,4 +1,4 @@
-all:	TournamentBranchPredictor.java sample_branch_sequence.txt
+all:	TournamentBranchPredictor.java 
 		@javac TournamentBranchPredictor.java
 		@java TournamentBranchPredictor
 clean:

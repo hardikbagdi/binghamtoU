@@ -94,13 +94,16 @@ public class APEX{
 	}
 
 	public void doFetch(){
-		//	System.out.println("-->(from fetch)value of decode stall"+checkDecodeStall());
+			// System.out.println("-->(from fetch)value of decode stall"+checkDecodeStall());
+			System.out.println("-->(stalled"+stalled);
+			System.out.println("-->(flagEND"+flagEND);
+		
 		if(stalled ) return;
 			inFetchtoNext=inFetch;
 		if(flagEND) inFetch=null;
 		//	if(checkDecodeStall(inFetchtoNext)) return;
 		inFetch=this.instructions[GlobalPC-20000];
-		System.err.print(" Fetch "+inFetch);//inFetch.printRaw();
+		System.out.print(GlobalPC+" Fetch "+inFetch);//inFetch.printRaw();
 		//check if there is a next instruction. if yes, then incremenet the counter. else increment the counter 
 		// and set end of file flag. we will never increment the counter beyond this now.
 		if(instructions[GlobalPC-20000+1].contains){
@@ -230,13 +233,21 @@ public class APEX{
 						case OR: OrFU(inEX);
 						break;
 						case BNZ: 
-									if(PSW_Z!=0) GlobalPC=register[inEX.destination];
+									if(PSW_Z!=0){ 
+								 		branchFlush();
+										GlobalPC=register[inEX.destination];
+									}
 									break;
 						case BZ: 
-								 	if(PSW_Z==0) GlobalPC=register[inEX.destination];
+								 	if(PSW_Z==0){
+								 		branchFlush();
+								 		GlobalPC=register[inEX.destination];
+
+								 	}
 									break;
-						case BAL: 
-									register[inEX.destination]=GlobalPC+1;
+						case BAL: 	branchFlush();
+									stalled=false;
+									register[inEX.destination]=inEX.address+1;
 									GlobalPC=register[inEX.src1]+inEX.literal;
 									break;
 						case JUMP:	branchFlush();
@@ -258,7 +269,7 @@ public class APEX{
 				registerValid[i]=true;
 			}
 		}
-		inDecode=null;inFetch=null;
+		inDecode=null;inFetch=null;inFetchtoNext=null;inDecodetoNext=null;
 	}
 	
 	public void AddFU(Instruction instruction){
@@ -329,10 +340,10 @@ public class APEX{
 
 	void LoadStoreFU(Instruction instrucion){
 		if(instrucion.instr_id==InstructionType.LOAD){
-			instrucion.destination_data=memory[instrucion.src1_data+instrucion.src2_data];
+			instrucion.destination_data=memory[instrucion.src1_data+instrucion.literal];
 		}	
 		else if(instrucion.instr_id==InstructionType.STORE){
-			memory[instrucion.src1_data+instrucion.src2_data]=register[instrucion.destination];
+			memory[instrucion.src1_data+instrucion.literal]=register[instrucion.destination];
 
 		}
 	}

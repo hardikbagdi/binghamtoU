@@ -1,0 +1,13 @@
+Instruction class abstracts all data about an instruction which can exist.
+
+APEX class is the actual processor which has functions for each stage and pipeline registers for simulation.
+
+The simulation is performed by repeated executing the 5 functions.
+
+Flags used for communication between various stages for stall conditions & branching.
+
+Branching if takes place,then flushes the Fetch& Decode stages. If not, then the follow through is executed withoutany kind of stalls.
+
+Dependencies are being taken care of by using a boolean flag for each register. If for any destination or source register, the flag is set to false, then the instruction stalls in the decode stage itself.
+
+Memory dependecy are NOT being taken care of.

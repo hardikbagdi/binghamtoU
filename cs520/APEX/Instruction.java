@@ -1,4 +1,4 @@
-enum InstructionType {ADD,SUB,MUL,AND,OR,XOR,MOVC,LOAD,STORE,BZ,BNZ,JUMP,BAL,HALT}
+enum InstructionType {ADD,SUB,MUL,AND,OR,XOR,MOVC,MOV,LOAD,STORE,BZ,BNZ,JUMP,BAL,HALT}
 
 /*
 MOVC only in WB
@@ -36,7 +36,7 @@ public class Instruction{
 	public void print(){
 		StringBuilder s= new StringBuilder();
 		if(instr_id!=null){s.append("Instruction:"+instr_id.toString());}else{System.out.println("Empty");return;}
-		s.append("Dest:R"+destination+"\tSrc1:R"+src1+"\tSrc2:R"+src2+"\tAddress(PC):"+address);
+		s.append("Dest:R "+destination+"\tSrc1:R "+src1+"\tSrc2:R "+src2+"\tliteral:"+literal+"\tAddress(PC):"+address);
 		System.out.println(s);
 
 

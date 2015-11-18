@@ -12,6 +12,7 @@ import java.io.*;
 public class APEX{
 	//CPU representations
 	public int PSW_Z=-1;
+
 	public int register[];
 	public boolean registerValid[];
 	public int invaliditySetBy[];
@@ -35,20 +36,20 @@ public class APEX{
 	//constructor
 	public APEX(){
 		GlobalPC=20000;
-		instructions= new Instruction[100];
-		for (int i=0;i<100 ;i++ ) {
+		instructions= new Instruction[1000];
+		for (int i=0;i<1000 ;i++ ) {
 			instructions[i]=new Instruction();
 		}
-		register = new int[8];
-		registerValid= new boolean[8];
-		invaliditySetBy= new int[8];
+		register = new int[9];
+		registerValid= new boolean[9];
+		invaliditySetBy= new int[9];
 		//hardcoding
 		//register[2]=100;
 		//register[3]=200;
-		for(int i=0;i<8;i++) 
+		for(int i=0;i<9;i++) 
 			registerValid[i]=true;
 		memory = new int[10000];
-		for(int i=0;i<8;i++) 
+		for(int i=0;i<9;i++) 
 			invaliditySetBy[i]=-1;
 		//inFetch= new Instruction();
 		//	inDecode= new Instruction();
@@ -63,8 +64,9 @@ public class APEX{
 			System.out.print("Cycle: "+(i+1)+"\n");
 			//swap memory
 			if(GlobalPC<20000) {
-				System.out.println("\n Invalid PC valuee");
-				System.exit(0);
+				GlobalPC= (GlobalPC% 20000)+20000;//hack for instructon address
+				// System.out.println("\n Invalid PC value1e");
+				// System.exit(0);
 			}
 			doFetch();
 			System.err.println("=====decode starts");
@@ -95,15 +97,36 @@ public class APEX{
 
 	public void doFetch(){
 			// System.out.println("-->(from fetch)value of decode stall"+checkDecodeStall());
-			System.out.println("-->(stalled"+stalled);
-			System.out.println("-->(flagEND"+flagEND);
+			//System.out.println("-->(stalled"+stalled);
+			//System.out.println("-->(flagEND"+flagEND);
+		if(flagEND && stalled) 
+			return;
+		//this if is a hack for execution after a JUMP ADN dependecy satisfaction
 		
-		if(stalled ) return;
-			inFetchtoNext=inFetch;
+
+
+
+		if(stalled)
+			return;
+
+
+		// if(stalled ){ 
+		// 	stalled=checkDecodeStall(inDecode);
+		// 	stalled=checkDecodeStall(inDecode);
+		// 	if(stalled)
+		// 		return;
+		// }
+		
+
+
+
+
+
+		inFetchtoNext=inFetch;
 		if(flagEND) inFetch=null;
 		//	if(checkDecodeStall(inFetchtoNext)) return;
 		inFetch=this.instructions[GlobalPC-20000];
-		System.out.print(GlobalPC+" Fetch "+inFetch);//inFetch.printRaw();
+	//	System.out.print(GlobalPC+" Fetch "+inFetch);//inFetch.printRaw();
 		//check if there is a next instruction. if yes, then incremenet the counter. else increment the counter 
 		// and set end of file flag. we will never increment the counter beyond this now.
 		if(instructions[GlobalPC-20000+1].contains){
@@ -116,10 +139,12 @@ public class APEX{
 	}
 
 	public void doDecode(){
-		System.err.println(inDecode);
+		// System.out.println("D-->(stalled"+stalled);
+		// System.err.println(inDecode);
 		if(inDecode!=null){
 		//System.err.print(" Decode "+inDecode+"\t\t\t"+inDecode.address);
 			if(stalled){
+				// System.out.println("D1-->(stalled"+stalled);
 				inDecodetoNext=null;
 				//System.err.println("\n\n\n\n recheckingforstall\n\n\n\n"+inDecode);
 				if(checkDecodeStall(inDecode))
@@ -144,7 +169,12 @@ public class APEX{
 						
 				}
 		else{
+			// System.out.println("D2-->(stalled"+stalled);
+			// System.out.println(inDecode);
+			// System.out.println(inFetchtoNext);
+				
 				System.err.println("\n\n\n\n no stall in last\n\n\n\n");
+				
 				inDecodetoNext=inDecode;
 				inDecode=inFetchtoNext;
 				if(checkDecodeStall(inDecode)){
@@ -173,6 +203,7 @@ public class APEX{
 			}
 		}
 	 else{
+			System.out.println("D3-->(stalled"+stalled);
 			System.err.println("\n\n\n\nw\n\n\n\n");
 			inDecodetoNext=inDecode;
 			inDecode=inFetchtoNext;
@@ -216,6 +247,7 @@ public class APEX{
 					switch (inEX.instr_id) {
 						//do nothing
 						case MOVC: 
+						case MOV: 
 						case LOAD:
 						case STORE:
 						case HALT:
@@ -235,23 +267,25 @@ public class APEX{
 						case BNZ: 
 									if(PSW_Z!=0){ 
 								 		branchFlush();
-										GlobalPC=register[inEX.destination];
+										GlobalPC=inEX.address+inEX.literal; //relative addressign
 									}
 									break;
 						case BZ: 
 								 	if(PSW_Z==0){
 								 		branchFlush();
-								 		GlobalPC=register[inEX.destination];
+								 		
+								 		GlobalPC=inEX.address+inEX.literal;
 
 								 	}
 									break;
 						case BAL: 	branchFlush();
-									stalled=false;
-									register[inEX.destination]=inEX.address+1;
-									GlobalPC=register[inEX.src1]+inEX.literal;
+									stalled=false; //hack. can go wrong!!!
+									register[8]=inEX.address+1;
+									GlobalPC=register[inEX.destination]+inEX.literal; //absolute addressing
 									break;
 						case JUMP:	branchFlush();
-									GlobalPC= register[inEX.destination];
+									stalled=false; //hack. can go wrong!!!
+									GlobalPC= register[inEX.destination]+inEX.literal;//absolute addressing
 									break;
 						
 					}
@@ -277,6 +311,9 @@ public class APEX{
 		int operand2=0;
 		operand2=  instruction.src2!= -1 ? instruction.src2_data : instruction.literal;
 		instruction.destination_data= instruction.src1_data+operand2;
+		if(instruction.destination_data==0)PSW_Z=0;
+		else
+			PSW_Z=-1;
 	}
 	
 	public void MulFU(Instruction instruction){
@@ -292,30 +329,38 @@ public class APEX{
 		operand2=  instruction.src2!= -1 ? instruction.src2_data : instruction.literal;
 		instruction.destination_data= instruction.src1_data-operand2;
 		if(instruction.destination_data==0)PSW_Z=0;
+		else
+			PSW_Z=-1;
 	}
 
 	public void AndFU(Instruction instruction){
-		System.err.println("in AND fu");
-		int operand2=0;
-		operand2=  instruction.src2!= -1 ? instruction.src2_data : instruction.literal;
-		instruction.destination_data= instruction.src1_data & operand2;
-		if(instruction.destination_data==0)PSW_Z=0;
+		System.out.println("in OR fu");
+ 		int operand2=0;
+ 		operand2=  instruction.src2!= -1 ? instruction.src2_data : instruction.literal;
+ 		instruction.destination_data= instruction.src1_data & operand2;
+ 		if(instruction.destination_data==0)PSW_Z=0;
+ 		else
+			PSW_Z=-1;
 	}
 	
 	public void OrFU(Instruction instruction){
-		System.err.println("in OR fu");
-		int operand2=0;
-		operand2=  instruction.src2!= -1 ? instruction.src2_data : instruction.literal;
-		instruction.destination_data= instruction.src1_data | operand2;
-		if(instruction.destination_data==0)PSW_Z=0;
+		System.out.println("in OR fu");
+ 		int operand2=0;
+ 		operand2=  instruction.src2!= -1 ? instruction.src2_data : instruction.literal;
+ 		instruction.destination_data= instruction.src1_data | operand2;
+ 		if(instruction.destination_data==0)PSW_Z=0;
+ 		else
+			PSW_Z=-1;
 	}
 	
 	public void XorFU(Instruction instruction){
-		System.err.println("in XOR fu");
-		int operand2=0;
-		operand2=  instruction.src2!= -1 ? instruction.src2_data : instruction.literal;
-		instruction.destination_data= instruction.src1_data ^ operand2;
-		if(instruction.destination_data==0)PSW_Z=0;
+		System.out.println("in OR fu");
+ 		int operand2=0;
+ 		operand2=  instruction.src2!= -1 ? instruction.src2_data : instruction.literal;
+ 		instruction.destination_data= instruction.src1_data ^ operand2;
+ 		if(instruction.destination_data==0)PSW_Z=0;
+ 		else
+			PSW_Z=-1;
 	}
 	
 	public void doMEM(){
@@ -327,6 +372,8 @@ public class APEX{
 			switch (inMEM.instr_id) {
 				//do nothing
 				case MOVC: 	inMEM.destination_data=inMEM.literal;
+							break;
+				case MOV: 	inMEM.destination_data=register[inMEM.src1];
 							break;
 				case LOAD: 
 				case STORE: LoadStoreFU(inMEM);
@@ -340,17 +387,33 @@ public class APEX{
 
 	void LoadStoreFU(Instruction instrucion){
 		if(instrucion.instr_id==InstructionType.LOAD){
+			if(instrucion.literal==-1){
+
+			instrucion.destination_data=memory[instrucion.src1_data+instrucion.src2_data];
+			}
+			else {
+				
 			instrucion.destination_data=memory[instrucion.src1_data+instrucion.literal];
+			}
 		}	
+
 		else if(instrucion.instr_id==InstructionType.STORE){
+			if(instrucion.literal==-1){
+
+			memory[instrucion.src1_data+instrucion.src2_data]=register[instrucion.destination];
+			
+			}
+			else {
+				
 			memory[instrucion.src1_data+instrucion.literal]=register[instrucion.destination];
+			}
 
 		}
 	}
 
 	public void doWB(){
 		inWB=inMEMtoNext;
-		if(inWB!=null){
+		if(inWB!=null && inWB.instr_id!=null){
 	
 			//code to writeback
 				System.err.print(" WB "+inWB+"\n");//inWB.printRaw();
@@ -363,6 +426,7 @@ public class APEX{
 									System.exit(0);
 									break;
 						case MOVC: 
+						case MOV: 
 						case LOAD:
 						case ADD: 
 						case MUL:				
@@ -431,6 +495,7 @@ public class APEX{
 	}
 	public void displayAll(){
 		System.out.println("\n\n\nProgram Counter:"+GlobalPC);
+		System.out.println("\n PSW-Zero(only 0 is 0):"+PSW_Z);
 		System.out.println("\nRegisters:");
 		System.out.print("R0:"+register[0]);
 		System.out.print("\tR1:"+register[1]);
@@ -440,13 +505,14 @@ public class APEX{
 		System.out.print("\tR5:"+register[5]);
 		System.out.print("\tR6:"+register[6]);
 		System.out.print("\tR7:"+register[7]);
+		System.out.print("\tX:"+register[8]);
 		System.out.print("\n");
-		for(int i=0;i<8;i++){
+		for(int i=0;i<9;i++){
 			System.out.print(registerValid[i]+"\t");
 		}
-		System.out.println("\n\nMemory(0 to 99):");
+		System.out.println("\n\nMemory(0 to 100):");
 
-		for(int i=0;i<100;i++){
+		for(int i=0;i<=100;i++){
 			System.out.print(memory[i]+"\t");
 			if((i+1)%10==0)System.out.println();
 		}
@@ -455,7 +521,9 @@ public class APEX{
 
 	}
 	public int userInputInit(Scanner s){
-		int input = s.nextInt();
+		int input ;
+		input = s.nextInt();
+		
 		switch (input) {
 			case 1: processorInit();
 			break;
@@ -492,60 +560,122 @@ public class APEX{
 	}
 	public void complieInstructions(Instruction instruction) throws Exception{
 		int literal=0;
+		String d;
 		int noOfOperands=0;
 		String string = instruction.rawString;
-		StringTokenizer tokenizer = new StringTokenizer(string);
-		instruction.inst_name=tokenizer.nextToken(" ").trim();
+		StringTokenizer tokenizer = new StringTokenizer(string," ");
+		instruction.inst_name= tokenizer.nextToken();	
+		//hack for EX-OR to be added
+		//using try catch
+		if(instruction.inst_name.equals("EX-OR")){
+			instruction.instr_id= InstructionType.XOR;
+		}
+		else{
 		instruction.instr_id= InstructionType.valueOf(instruction.inst_name);
+		}
+		
 		if(instruction.instr_id==InstructionType.HALT) return;
-	// System.err.println("w"+instruction.instr_id+"w");
-	// System.err.println("w"+instruction.inst_name+"w");
-		instruction.destination=Integer.parseInt(tokenizer.nextToken(",").replace(" ","").substring(1) );
-		noOfOperands++;
-	//System.err.println(instruction.destination);
-	// System.err.println(tokenizer);
-	//string.indexOf(",")
+		
 
 		if(tokenizer.hasMoreTokens()){
-			String token = tokenizer.nextToken();
-	//	System.err.println("Src1:");
-	//	System.err.println(token);
-			if(!token.contains("#")){
-				int src1= Integer.parseInt(token.replace(" ","").substring(1) );
-			// System.err.println(src1);
-				instruction.src1=src1;
-				noOfOperands++;
+		
+			 d = tokenizer.nextToken();
+			if(d.equals("X")){
+				instruction.destination=8;
 			}
+			else if (d.charAt(0)!='R') {
+				instruction.literal=Integer.parseInt(d);
+				System.out.println("JUMP/BZ/BNZ"+d);
+				return;
+			}
+			else{
+				instruction.destination=Integer.parseInt(d.substring(1) );
+			}
+		}
 
-
+		if(tokenizer.hasMoreTokens()){
+			 d = tokenizer.nextToken();
+			if(d.charAt(0)!='R'){
+				instruction.literal=Integer.parseInt(d);
+				return;
+			}
+			else if(d.equals("X")){
+				instruction.src1=8;
+			}
+			else{
+				instruction.src1= Integer.parseInt(d.substring(1) );
+			}
 		}
 		if(tokenizer.hasMoreTokens()){
-
-			String token = tokenizer.nextToken();
-		// System.err.println("Src2:");
-		//System.err.println(tokenizer.nextToken());
-			if(!token.contains("#")){
-				int src2= Integer.parseInt(token.replace(" ","").substring(1) );
-			// System.err.println(src2);
-				instruction.src2=src2;
-				noOfOperands++;
+		
+			 d = tokenizer.nextToken();
+			if(d.charAt(0)!='R'){
+				instruction.literal=Integer.parseInt(d);
+				return;
 			}
-
+			else{
+				instruction.src2= Integer.parseInt(d.substring(1) );
+			}
 		}
-	// System.err.println("Searching for literal");
-	//System.err.println("# index"+string.indexOf("#"));
-		if(string.indexOf("#")>0){
-			literal = Integer.parseInt(string.substring(string.indexOf("#")+1).trim());
-			instruction.literal=literal;
-			noOfOperands++;
-		// System.err.println("# value"+literal);
-		}
-		instruction.noOfOperands=noOfOperands;
-		if(noOfOperands>3){
-			throw new Exception("No of operands more than possible.");
-		}
-	//System.err.println("Count of operands"+noOfOperands);
 	}
+	// public void complieInstructions(Instruction instruction) throws Exception{
+	// 	int literal=0;
+	// 	int noOfOperands=0;
+	// 	String string = instruction.rawString;
+	// 	StringTokenizer tokenizer = new StringTokenizer(string);
+	// 	instruction.inst_name=tokenizer.nextToken(" ").trim();
+	// 	instruction.instr_id= InstructionType.valueOf(instruction.inst_name);
+	// 	//hack for EX-OR to be added
+
+	// 	if(instruction.instr_id==InstructionType.HALT) return;
+	// // System.err.println("w"+instruction.instr_id+"w");
+	// // System.err.println("w"+instruction.inst_name+"w");
+	// 	instruction.destination=Integer.parseInt(tokenizer.nextToken(",").replace(" ","").substring(1) );
+	// 	noOfOperands++;
+	// //System.err.println(instruction.destination);
+	// // System.err.println(tokenizer);
+	// //string.indexOf(",")
+
+	// 	if(tokenizer.hasMoreTokens()){
+	// 		String token = tokenizer.nextToken();
+	// //	System.err.println("Src1:");
+	// //	System.err.println(token);
+	// 		if(!token.contains("#")){
+	// 			int src1= Integer.parseInt(token.replace(" ","").substring(1) );
+	// 		// System.err.println(src1);
+	// 			instruction.src1=src1;
+	// 			noOfOperands++;
+	// 		}
+
+
+	// 	}
+	// 	if(tokenizer.hasMoreTokens()){
+
+	// 		String token = tokenizer.nextToken();
+	// 	// System.err.println("Src2:");
+	// 	//System.err.println(tokenizer.nextToken());
+	// 		if(!token.contains("#")){
+	// 			int src2= Integer.parseInt(token.replace(" ","").substring(1) );
+	// 		// System.err.println(src2);
+	// 			instruction.src2=src2;
+	// 			noOfOperands++;
+	// 		}
+
+	// 	}
+	// // System.err.println("Searching for literal");
+	// //System.err.println("# index"+string.indexOf("#"));
+	// 	if(string.indexOf("#")>0){
+	// 		literal = Integer.parseInt(string.substring(string.indexOf("#")+1).trim());
+	// 		instruction.literal=literal;
+	// 		noOfOperands++;
+	// 	// System.err.println("# value"+literal);
+	// 	}
+	// 	instruction.noOfOperands=noOfOperands;
+	// 	if(noOfOperands>3){
+	// 		throw new Exception("No of operands more than possible.");
+	// 	}
+	// //System.err.println("Count of operands"+noOfOperands);
+	// }
 	public void processInput(){
 		BufferedReader br;
 		String line;
@@ -558,6 +688,7 @@ public class APEX{
 				this.instructions[i].contains=true;
 				this.instructions[i].address=i+20000;
 				this.complieInstructions(this.instructions[i]);
+				// instructions[i].print();
 				i++;
 			}
 		}

@@ -1,0 +1,27 @@
+public void doFetch(){
+			// System.out.println("-->(from fetch)value of decode stall"+checkDecodeStall());
+			System.out.println("-->(stalled"+stalled);
+			System.out.println("-->(flagEND"+flagEND);
+		if(flagEND && stalled) 
+			return;
+		//this if is a hack for execution after a JUMP ADN dependecy satisfaction
+		if(stalled ){ 
+			stalled=checkDecodeStall(inDecode);
+			
+			return;
+		}
+		inFetchtoNext=inFetch;
+		if(flagEND) inFetch=null;
+		//	if(checkDecodeStall(inFetchtoNext)) return;
+		inFetch=this.instructions[GlobalPC-20000];
+		System.out.print(GlobalPC+" Fetch "+inFetch);//inFetch.printRaw();
+		//check if there is a next instruction. if yes, then incremenet the counter. else increment the counter 
+		// and set end of file flag. we will never increment the counter beyond this now.
+		if(instructions[GlobalPC-20000+1].contains){
+				GlobalPC++;
+		}
+		else{
+			if(!flagEND){GlobalPC++;
+				flagEND=true;} // once set, never increment PC. means EOF reached and PC will point to null
+		}
+	}

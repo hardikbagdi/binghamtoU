@@ -3,7 +3,6 @@
 #include <time.h>	/* time_t */
 #include <sys/time.h>	/* timeval, gettimeofday() */
 #include "Lists.h"
-//struct Data;
 int main(){
 	struct timeval start, stop;
 	int i=0,n=0;;
@@ -51,7 +50,7 @@ int main(){
 	 start_time = (start.tv_sec* 1000000) + start.tv_usec;
 	 stop_time = (stop.tv_sec* 1000000) + stop.tv_usec;
 	 final_time_geo = stop_time - start_time; 
-	printf("\nProfiling with 10,000 insertions\nGeometric Expansion: %ld\n",final_time_geo );
+	printf("\nProfiling with 10,000 insertions\nGeometric Expansion: %ld microsecond\n",final_time_geo );
 
 
 	vector = createVector();
@@ -70,36 +69,8 @@ int main(){
 	 start_time = (start.tv_sec* 1000000) + start.tv_usec;
 	 stop_time = (stop.tv_sec* 1000000) + stop.tv_usec;
 	 final_time_inc = stop_time - start_time; 
-	printf("\nIncremental Expansion: %ld\n",final_time_inc );
-	printf("\nDifference: %ld\n",final_time_inc- final_time_geo );
-
-
-
-	//misc tests
-	// vector = createVector();	
-	// vectorInsert(vector,0,d);
-	// vectorPrint(vector);
+	printf("\nIncremental Expansion: %ld microsecond\n",final_time_inc );
 	
-	// d.d=22;	
-	// vectorInsert(vector,1,d);
-	// vectorPrint(vector);
-	
-	// d.d=222;
-	// vectorInsert(vector,2,d);
-	// vectorPrint(vector);
-	// vectorRemove(vector,1);
-	//  x= vectorRead(vector,0);
-	// printf("%d\n", x);
-	//  x= vectorRead(vector,1);
-	// printf("%d\n", x);
-	//  x= vectorRead(vector,2);
-	// printf("%d\n", x);
-	// vectorPrint(vector);
-
-	// //for( i=0;i<vector->max_size;i++){
-	// vector= vectorDelete(vector);
-	//}
-
 	printf("\n===PART 2-A===\n");
 	List* list  = createList();
 	printf("\nInserting 10 random elements into the linked list\n");
@@ -127,10 +98,10 @@ int main(){
 	scanf("%d",&n);
 	x= searchForward(list,n);
 	if(x!=-1)
-		printf("\nValue found(0-indexed):%d\n", x);
+		printf("\nValue found(searchForward):%d\n", x);
 	x= searchBackward(list,n);
 	if(x!=-1)
-		printf("\nValue found(0-indexed):%d\n", x);
+		printf("\nValue found(searchBackward):%d\n", x);
 	deleteList(list);
 
 	printf("\n===PART 3===\n");

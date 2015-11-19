@@ -18,10 +18,10 @@ void vectorInsert(Vector* array,int index,Data value){
 	new_size=2*(array->max_size);
 
 	if(array->max_size < (index+1)){
-		//printf("\ngreater \n");
+		
 		Data *p1= malloc(new_size*sizeof(Data));
 		while(( index+1) >new_size){
-			//printf("\ninc: %d, new size is %d \n",index,new_size);
+			
 			free(p1);
 			new_size=2*new_size;
 			p1= malloc(new_size*sizeof(Data));
@@ -54,10 +54,10 @@ void vectorInsertincremental(Vector* array,int index,Data value){
 	new_size=1+(array->max_size);
 
 	if(array->max_size < (index+1)){
-	//	printf("\ngreater \n");
+	
 		Data *p1= malloc(new_size*sizeof(Data));
 		while(( index+1) >new_size){
-		//	printf("\ninc: %d, new size is %d \n",index,new_size);
+		
 			free(p1);
 			new_size=2*new_size;
 			p1= malloc(new_size*sizeof(Data));
@@ -138,20 +138,18 @@ Node* frontNode(List* list){
 	return list->head;
 }
 Node* insertNode(List* list,int index,Data d){
-	// printf("in 1insertnode\n");
+
 	Node* curr= list->head;
 	Node* prev;
-	// printf("in insertnode\n");
 	if(list->head==NULL){
-		// printf("\nin null\n");
 		Node* new = createNode();
 		new->data=d;
 		list->head=new;
 		return new;
 	}
-	// printf("in insertnode\n");
+
 	if(index==0){
-		// printf("should pront\n");
+	
 		Node* new = createNode();
 		new->data=d;
 		new->next=curr;
@@ -159,19 +157,18 @@ Node* insertNode(List* list,int index,Data d){
 		list->head=new;
 		return new;
 	}
-	// printf("inside insert node\n");
+	
 	int counter=0;
 	int length=0;
 	Node* new = createNode();
 	new->data=d;
 	while(curr!=NULL){
-		//printf("counting node\n");
+		
 		length++;
 		curr=curr->next;
 	}
-	// printf("length%d",length);
 	if(length>=index){
-		// printf("in if\n");
+		
 		curr= list->head;
 		while(counter<(index-1)){
 			curr=curr->next;
@@ -184,7 +181,7 @@ Node* insertNode(List* list,int index,Data d){
 		next->prev=new;
 	}
 	else{
-		// printf("in else\n");
+		
 		curr= list->head;
 		while(curr->next!=NULL){
 			curr=curr->next;
@@ -209,7 +206,7 @@ int removeNode(List* list,int index){
 	
 	int length=0, counter=0;
 	while(curr!=NULL){
-		//printf("counting node\n");
+		
 		length++;
 		curr=curr->next;
 	}
@@ -219,9 +216,8 @@ int removeNode(List* list,int index){
 		list->head=NULL;
 		return returnVal;
 	}
-	// printf("length: %d, index: %d\n",length, index );
+	
 	if(index>length){
-		// printf("if\n");
 		curr= list->head;
 		while(curr!=NULL){
 			prev=curr;
@@ -235,7 +231,6 @@ int removeNode(List* list,int index){
 		return returnVal;
 	}
 	else{
-		// printf("else %d\n",counter );
 		curr=list->head;
 		while(counter<(index-1)){
 			curr=curr->next;
@@ -342,7 +337,6 @@ void deleteStack(Stack* stack){
 void push(Stack* stack,int value){
 	Data d;
 	d.d=value;
-	//printf("in push\n");
 	insertNode(stack->list,0,d);
 }
 int  pop(Stack* stack){
@@ -370,11 +364,10 @@ void deleteQueue(Queue* queue){
 void enqueue(Queue* queue,int value){
 	Data d;
 	d.d=value;
-	//printf("in push\n");
 	insertNode(queue->list,INT_MAX,d);
 }
 int dequeue(Queue* queue){
-	int x= removeNode(queue->list,INT_MAX);
+	int x= removeNode(queue->list,0);
 	if(x==-1){
 	 	printf("Queue Underflow\n");
 	 	return -1;

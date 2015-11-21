@@ -24,5 +24,6 @@ Node* createNode(Data);
 void insertNode(Tree * bst, Data value);
 Node * searchTree(Tree * bst, Data value);
 void removeNode(Tree * bst, Data value);
+Tree* deleteTree(Tree* bst);
 #endif
 

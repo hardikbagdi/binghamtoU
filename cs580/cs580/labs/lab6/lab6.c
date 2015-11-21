@@ -27,6 +27,7 @@ int main(){
 		if((i+1)%10==0) 
 			printf("\n");
 	}
+	vectorPrint(vector);
 	for(i=0;i<20;i++){
 		vectorRemove(vector,i);
 	}
@@ -112,10 +113,11 @@ int main(){
 		scanf("%d",&x);
 		push(stack,x);
 	}
-	printf("Popping");
+	printList(stack->list);
+	printf("Popping\n");
 	for(i=1;i<=5;i++){
 		x= pop(stack);
-	printf("\t%d", x);
+	printf("Popped:\t%d\n", x);
 	}
 	deleteStack(stack);
 	
@@ -127,10 +129,11 @@ int main(){
 		scanf("%d",&x);
 		enqueue(queue,x);
 	}
-	printf("Dequeuing");
+	printList(queue->list);
+	printf("Dequeuing\n");
 	for(i=1;i<=5;i++){
 		x= dequeue(queue);
-		printf("\t%d", x);
+		printf("Dequeued:\t%d\n", x);
 	}
 	deleteQueue(queue);
 

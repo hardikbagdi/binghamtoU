@@ -15,6 +15,8 @@ Vector* createVector(){
 void vectorInsert(Vector* array,int index,Data value){
 	int i=0;
 	int new_size=0;
+	if(array==NULL || array->p ==NULL)
+		return;
 	new_size=2*(array->max_size);
 
 	if(array->max_size < (index+1)){
@@ -50,7 +52,8 @@ void vectorInsert(Vector* array,int index,Data value){
 void vectorInsertincremental(Vector* array,int index,Data value){
 	int i=0;
 	int new_size=0;
-	
+	if(array==NULL || array->p ==NULL)
+		return;
 	new_size=1+(array->max_size);
 
 	if(array->max_size < (index+1)){
@@ -59,7 +62,7 @@ void vectorInsertincremental(Vector* array,int index,Data value){
 		while(( index+1) >new_size){
 		
 			free(p1);
-			new_size=2*new_size;
+			new_size=1+new_size;
 			p1= malloc(new_size*sizeof(Data));
 			array->max_size= new_size;
 		}
@@ -141,23 +144,24 @@ Node* insertNode(List* list,int index,Data d){
 
 	Node* curr= list->head;
 	Node* prev;
+	//case when list is empty, just insert at the head
 	if(list->head==NULL){
 		Node* new = createNode();
 		new->data=d;
 		list->head=new;
 		return new;
 	}
-
+	//case when insert at the head itself
 	if(index==0){
-	
+	// printf("inserting at index 0\n");
 		Node* new = createNode();
 		new->data=d;
-		new->next=curr;
-		curr->prev=new;
+		list->head->prev=new;
+		new->next=list->head;
 		list->head=new;
 		return new;
 	}
-	
+	//other cases
 	int counter=0;
 	int length=0;
 	Node* new = createNode();
@@ -167,6 +171,7 @@ Node* insertNode(List* list,int index,Data d){
 		length++;
 		curr=curr->next;
 	}
+	//if in between the list
 	if(length>=index){
 		
 		curr= list->head;
@@ -180,6 +185,7 @@ Node* insertNode(List* list,int index,Data d){
 		new->next= next;
 		next->prev=new;
 	}
+	//when provided index is greater than the length of the list
 	else{
 		
 		curr= list->head;
@@ -191,32 +197,38 @@ Node* insertNode(List* list,int index,Data d){
 	}
 }
 int removeNode(List* list,int index){
+	//sanity check
 	if(list==NULL || list->head==NULL) return -1;
 	int returnVal;
 	Node* curr= list->head;
 	Node* next,*prev;
 	Node* freeup;
+	//delete head node
 	if(index==0){
+		// printf("deleting at index 0\n");
 		freeup= list->head;
 		returnVal=freeup->data.d;
+		if(list->head->next!=NULL)
+			list->head->next->prev=NULL;
 		list->head=list->head->next;
 		deleteNode(freeup);
 		return returnVal;
 	}
-	
+	//other cases, find length first
 	int length=0, counter=0;
 	while(curr!=NULL){
 		
 		length++;
 		curr=curr->next;
 	}
+	//return head node list length is 1, be it any input index
 	if(length==1){
 		returnVal = list->head->data.d;
 		deleteNode(list->head);
 		list->head=NULL;
 		return returnVal;
 	}
-	
+	// index out of bounds, delete last element
 	if(index>length){
 		curr= list->head;
 		while(curr!=NULL){
@@ -240,6 +252,7 @@ int removeNode(List* list,int index){
 		freeup=curr->next;
 		returnVal=freeup->data.d;
 		curr->next=next;
+		next-> prev = curr;
 		deleteNode(freeup);
 		return returnVal;
 
@@ -303,11 +316,13 @@ int searchBackward(List* list, int value){
 	int index=0;
 	Node* curr = list->head;
 	Node* last;
+	//traverse to end of the list
 	while(curr!=NULL){
 		last=curr;
 		curr=curr->next;
 	}
 	curr=last;
+	//move backwards  & compare
 	while(curr!=NULL && curr->data.d!=value){
 		curr=curr->prev;
 		index++;

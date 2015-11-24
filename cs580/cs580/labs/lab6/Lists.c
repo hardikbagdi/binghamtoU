@@ -6,7 +6,11 @@ int sum(int a,int b){return a+b;}
 
 Vector* createVector(){
 	Vector* vector = malloc(sizeof(Vector));
+	if(vector==NULL)
+		return;
 	vector->p = malloc(sizeof(Data));
+	if(vector->p==NULL)
+		return;
 	vector->max_size=1;
 	vector->current_size=0;
 }
@@ -127,6 +131,8 @@ Vector* vectorDelete(Vector* v){
 //functions for linkedlist
 Node* createNode(){
 	Node* node =  malloc(sizeof(Node));
+	if(node==NULL)
+		return;
 	node->data.d=-1;
 	node->next=NULL;
 	node->prev=NULL;
@@ -134,6 +140,8 @@ Node* createNode(){
 }
 List* createList(){
 	List*  list = malloc(sizeof(List));
+	if(list==NULL)
+		return;
 	list->head= NULL;
 	return list;
 }
@@ -259,9 +267,13 @@ int removeNode(List* list,int index){
 	}
 }
 void deleteNode(Node * node){
+	if(node==NULL)
+		return;
 	free(node);
 }
 void deleteList(List* list){
+	if(list==NULL)
+		return;
 	Node *temp;
 	Node* curr = list->head;
 	while(curr!=NULL){
@@ -272,6 +284,8 @@ void deleteList(List* list){
 	free(list);
 }
 void printList(List* list){
+	if(list==NULL)
+		return;
 	printf("\nList\t");
 	Node* curr = list->head;
 	while(curr!=NULL){
@@ -281,6 +295,8 @@ void printList(List* list){
 	printf("end\n");
 }
 void printListBackwards(List* list){
+	if(list==NULL)
+		return;
 	printf("\nList-Backwards\n\t");
 	Node* curr = list->head;
 	Node* last;
@@ -298,6 +314,8 @@ void printListBackwards(List* list){
 }
 
 int searchForward(List* list, int value){
+	if(list==NULL)
+		-1;
 	int index=0;
 	Node* curr= list->head;
 	while(curr!=NULL && curr->data.d!=value){
@@ -313,6 +331,8 @@ int searchForward(List* list, int value){
 	}
 }
 int searchBackward(List* list, int value){
+	if(list==NULL)
+		-1;
 	int index=0;
 	Node* curr = list->head;
 	Node* last;
@@ -339,22 +359,32 @@ int searchBackward(List* list, int value){
 
 Stack* createStack(){
 	Stack* stack = malloc(sizeof(Stack));
+	if(stack==NULL)
+		return NULL;
 	stack->list = createList();
+	if(stack->list==NULL)
+		return NULL;
 	return stack;
 }
 
 void deleteStack(Stack* stack){
+	if(stack==NULL)
+		return;
 	deleteList(stack->list);
 	free(stack);
 }
 
 
 void push(Stack* stack,int value){
+	if(stack==NULL)
+		return;
 	Data d;
 	d.d=value;
 	insertNode(stack->list,0,d);
 }
 int  pop(Stack* stack){
+	if(stack==NULL)
+		return;
 	 int x=removeNode(stack->list,0);
 	 if(x==-1){
 	 	printf("Stack Underflow\n");
@@ -368,7 +398,11 @@ int  pop(Stack* stack){
 
 Queue* createQueue(){
 	Queue* queue = malloc(sizeof(Queue));
+	if(queue==NULL)
+		return NULL;
 	queue->list = createList();
+	if(queue->list==NULL)
+		return NULL;
 	return queue;
 }
 void deleteQueue(Queue* queue){
@@ -377,11 +411,15 @@ void deleteQueue(Queue* queue){
 }
 
 void enqueue(Queue* queue,int value){
+	if(queue==NULL)
+		return;
 	Data d;
 	d.d=value;
 	insertNode(queue->list,INT_MAX,d);
 }
 int dequeue(Queue* queue){
+	if(queue==NULL)
+		return;
 	int x= removeNode(queue->list,0);
 	if(x==-1){
 	 	printf("Queue Underflow\n");

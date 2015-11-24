@@ -6,7 +6,7 @@
 int main(){
 	struct timeval start, stop;
 	int i=0,n=0;;
-	srand(0);
+	srand(time(0));
 	time_t start_time, stop_time,final_time_geo,final_time_inc;
 	int x;	
 	Vector* vector = createVector();

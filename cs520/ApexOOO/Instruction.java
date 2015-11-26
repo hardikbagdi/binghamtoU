@@ -44,11 +44,17 @@ public class Instruction {
 	public int address;
 	// type of FU required. Selection between Int FU(0) and Mul FU(1)
 	public int FUtype;
+	//age in IQ, to make sure instructions spends atleast one cycle in IQ
+	public int ageInIQ;
 	// no of operands of a given instruction, bug checking only
 	int noOfOperands;
+	//to check for WB complete in ROB
+	public boolean writtenBack;
 
 	public Instruction() {
 		contains = false;
+		writtenBack=false;
+		ageInIQ=0;
 		instr_id = null;
 	}
 

@@ -16,7 +16,7 @@ public class ApexOOO {
 	public int invaliditySetBy[];
 	// memory
 	public int memory[];
-	// PC coutner - next fetch
+	// PC counter - next fetch
 	public int GlobalPC;
 	// hold the instructions of the input file
 	Instruction[] instructions;
@@ -34,23 +34,29 @@ public class ApexOOO {
 	// bit to decide if pointing to ARF or PRF
 	int[] RATdecision; // 0 means ARF , 1 means PRF
 	// hold pipeline details in real time
-	public Instruction inFetch = null, inDecode = null, toIntFu = null, toMulFU = null, inExIntFU = null, inExMulFU = null, inMEM = null, inWB = null;
+	public Instruction inFetch = null, inDecode = null, toIntFu = null, toMulFU = null, inExIntFU = null,
+			inExMulFU = null, inMEM = null, inWB = null;
 	// passing on. work as pipeline registers.
-	public Instruction inFetchtoNext = null, inDecodetoNext = null, inEXtoNext = null, inMEMtoNext = null;
+	public Instruction inFetchtoNext = null, inDecodetoNext = null, toMEM = null, inMEMtoNext = null;
 	// various flags to handle message passing
 	public boolean stalled = false;
-
-	// free up register method in Decode(case 2) TODO verify if free up possible in this case
+	// free up register method in Decode(case 2) TODO verify if free up possible
+	// in this case
 	public boolean freeUpRegisterInDecode = false;
 	public int RegisterToFree = -1;
 	// following not used currently
-	boolean stallFetch = false, stallDecode = false, stallEX = false, stallMEM = false, stallWB = false;
+	boolean stallFetch = false, stallDecode = false, stallEXAdd = false, stallEXMul = false, stallMEM = false, stallWB = false;
 	// take input for no of cycles to simulate.
 	public int userInputCycles;
 	// used to stop incrementing PC once end of instructions is reached
 	boolean flagEND = false;
 
 	// keeps track of Mul FU cycles - non-pipelined
+	public int multimer = 0;
+	// signals that MUL completed in the current cycle(and hence has to be
+	// forwarded to MEM
+	public boolean mulcompletes;
+
 	// constructor
 	public ApexOOO() {
 		GlobalPC = 20000;
@@ -68,7 +74,7 @@ public class ApexOOO {
 		RATdecision = new int[8];
 		// memory
 		memory = new int[10000];
-		// icache
+		// _-Cache
 		for (int i = 0; i < 1000; i++) {
 			instructions[i] = new Instruction();
 		}
@@ -76,17 +82,18 @@ public class ApexOOO {
 		RAT = new HashMap<Integer, Integer>();
 		for (int i = 0; i < 8; i++) {
 			RAT.put(i, i);
-			RATdecision[i] = 0; // initially all commited values. So,everything
+			RATdecision[i] = 0; // initially all committed values. So,everything
 			// points to ARF
 		}
-
-		for (int i = 8; i < 16; i++) {
+		// TODO confirm if initially all entries in RAT point to ARF as there
+		// will be no physical stand in for any register and hence no register
+		// will be valid(in the next for loop)
+		for (int i = 0; i < 16; i++) {
 			freelist.add(i);
 		}
+
 		for (int i = 0; i < 16; i++)
 			registerValid[i] = false;
-		for (int i = 0; i < 8; i++)
-			registerValid[i] = true;
 
 		for (int i = 0; i < 9; i++)
 			invaliditySetBy[i] = -1;
@@ -110,6 +117,7 @@ public class ApexOOO {
 			doEX();
 			doMEM();
 			doWB();
+			retirement();
 			// clock tick
 
 		}
@@ -184,6 +192,7 @@ public class ApexOOO {
 		// }
 	}
 
+	// TODO verify the rename logic. possible bug.
 	// executes only if Decode not stalling. renames and attempts to read
 	// sources. sets flags. renames destination and allocate a PR. update RAT.
 	// allocate IQ & ROB
@@ -194,8 +203,9 @@ public class ApexOOO {
 		// rename and try to read sources
 		if (instruction.src1 != -1) {
 			instruction.renamedSrc1 = RAT.get(instruction.src1);
-			if (RATdecision[instruction.renamedSrc1] == 0) {
+			if (RATdecision[instruction.src1] == 0) {
 				instruction.src1_data = ar_register[instruction.renamedSrc1];
+				instruction.src1valid = true;
 			} else {
 				if (registerValid[instruction.renamedSrc1] == true) {
 					instruction.src1_data = register[instruction.renamedSrc1];
@@ -207,8 +217,9 @@ public class ApexOOO {
 		}
 		if (instruction.src2 != -1) {
 			instruction.renamedSrc2 = RAT.get(instruction.src2);
-			if (RATdecision[instruction.renamedSrc2] == 0) {
+			if (RATdecision[instruction.src2] == 0) {
 				instruction.src2_data = ar_register[instruction.renamedSrc2];
+				instruction.src2valid = true;
 			} else {
 				if (registerValid[instruction.renamedSrc2] == true) {
 					instruction.src2_data = register[instruction.renamedSrc2];
@@ -218,6 +229,8 @@ public class ApexOOO {
 				}
 			}
 		}
+		// TODO biggest confirmations, read data in decode when RAT points to
+		// ARF for a source, so no register as such
 		// rename destination and update RAT other flags
 		if (instruction.destination != -1) {
 			// TODO verify allocation of various resources
@@ -225,12 +238,19 @@ public class ApexOOO {
 			renamed[x] = false;
 			registerValid[x] = false;
 			int currentStandin = RAT.get(instruction.destination);
+			if (RATdecision[instruction.destination] == 1)
+				renamed[currentStandin] = true;
 			RAT.put(instruction.destination, x);
+			RATdecision[instruction.destination] = 1;
 			instruction.renamedDestination = x;
-			renamed[currentStandin] = true;
+
 			sb.append("P" + instruction.renamedDestination);
 			if (instruction.src1 != -1) {
-				sb.append(" P" + instruction.renamedSrc1);
+				if (RATdecision[instruction.src1] != 0)
+					sb.append(" P" + instruction.renamedSrc1);
+				else {
+					sb.append("(" + instruction.src1_data + ")");
+				}
 			}
 			// below 'if' will be removed as we will have to commit everything
 
@@ -244,15 +264,19 @@ public class ApexOOO {
 			// }
 		}
 		if (instruction.src2 != -1) {
-			sb.append(" P" + instruction.renamedSrc2);
+			if (RATdecision[instruction.src2] != 0)
+				sb.append(" P" + instruction.renamedSrc2);
+			else {
+				sb.append("(" + instruction.src2_data + ")");
+			}
 		}
 		if (instruction.literal != -1) {
-			sb.append(" P" + instruction.literal);
+			sb.append(" " + instruction.literal);
 		}
 		instruction.renamedString = sb.toString();
 		// TODO renaming the instruction string. not handled for X right now.
 		// set renamed string
-		// set issuable condition if all the required sources have been read in
+		// set Issuable condition if all the required sources have been read in
 		instruction.isReadyForIssue = true;
 		// set isIssuable if both the sources are ready.
 		if (instruction.src1 != -1)
@@ -260,6 +284,9 @@ public class ApexOOO {
 		if (instruction.src2 != -1)
 			instruction.isReadyForIssue &= instruction.src2valid;
 
+		// TODO confirm assumption: instruction once decoded is put into the
+		// issue queue entry and ROB entry by the end of the cycle in which it
+		// got decoded
 		// put into the empty slot in the IQ
 		for (int i = 0; i < 8; i++) {
 			if (issuequeue[i] == null) {
@@ -280,6 +307,8 @@ public class ApexOOO {
 		// TODO handle stalls in EX due to resource contention. when EX stalls,
 		// nothing goes from IQ to EX
 		Instruction instruction = null;
+		toIntFu = null;
+		// toMulFU = null;
 		// check forwarded data and read in wherever required.
 		for (int i = 0; i < 8; i++) {
 
@@ -287,30 +316,66 @@ public class ApexOOO {
 		// check instructions ready for issue
 		for (int i = 0; i < 8; i++) {
 			// set to null, just a pipeline register
-			toIntFu = null;
-			instruction = issuequeue[i];
-			instruction.isReadyForIssue = true;
-			// set isIssuable if both the sources are ready.
-			if (instruction.src1 != -1)
-				instruction.isReadyForIssue = instruction.src1valid;
-			if (instruction.src2 != -1)
-				instruction.isReadyForIssue &= instruction.src2valid;
-			if (instruction.isReadyForIssue && instruction.FUtype == 0 && toIntFu != null) {
-				// TODO issue to Int FU unit
-				toIntFu = issuequeue[i];
-				issuequeue[i] = null;
-			}
 
+			instruction = issuequeue[i];
+			if (instruction != null) {
+				++instruction.ageInIQ;
+				instruction.isReadyForIssue = true;
+				// set isIssuable if both the sources are ready.
+				if (instruction.src1 != -1)
+					instruction.isReadyForIssue = instruction.src1valid;
+				if (instruction.src2 != -1)
+					instruction.isReadyForIssue &= instruction.src2valid; // TODO
+																			// check
+																			// if
+																			// logic
+																			// works.
+				// TODO possible intFUstall boolean condition here to check if
+				// int fu stalled when resource contention takes place
+				if (instruction.isReadyForIssue && instruction.FUtype == 0 && toIntFu == null
+						&& instruction.ageInIQ > 1) {
+					toIntFu = issuequeue[i];
+					issuequeue[i] = null;
+					currentSizeIQ--;
+				}
+				if (instruction.isReadyForIssue && instruction.FUtype == 1 && toIntFu == null
+						&& instruction.ageInIQ > 1) {
+					toMulFU = issuequeue[i];
+					issuequeue[i] = null;
+					currentSizeIQ--;
+				}
+			}
 		}
 	}
 
 	public void doEX() {
-		if (!stallEX && !stallMEM && !stallWB) {
-			inEXtoNext = inExIntFU;
+		// timer for MUL non-pipelined delay(4)
+		multimer++;
+		if (multimer == 4) {
+			mulcompletes = true;
+			toMEM = inExMulFU;
+			inExMulFU = null;
+		}
+		
+		// TODO handle resource conflicts
+		// toMEM = inExIntFU;
+		//TODO experimental mulcompletes. mul given higher priority. if mul completes, then it is forwarded to MEM and int FU stalls
+		if (!mulcompletes && !stallEXAdd && !stallMEM && !stallWB) {
+			// TODO forward either INT or MUL to MEM
+			toMEM = inExIntFU;
+			
+			if (toMulFU != null && toMulFU.instr_id != null && inExMulFU == null) {
+				inExMulFU = toMulFU;
+				toMulFU = null;
+				multimer = 0;
+				MulFU(inExMulFU);
 
-			inExIntFU = inDecodetoNext;
+			}
+
+			// for all instructions other than MUL
+			inExIntFU = toIntFu;
 			if (inExIntFU != null && inExIntFU.instr_id != null) {
-				System.err.print(" EX " + inExIntFU);// inEX.printRaw();
+				System.err.println(" EX " + inExIntFU);// inEX.printRaw();
 				// main execution
 				switch (inExIntFU.instr_id) {
 				// do nothing
@@ -325,6 +390,7 @@ public class ApexOOO {
 				case ADD:
 					AddFU(inExIntFU);
 					break;
+				// TODO move to mul FU separate
 				case MUL:
 					MulFU(inExMulFU);
 					break;
@@ -372,7 +438,7 @@ public class ApexOOO {
 				}
 			}
 		} else {
-			inEXtoNext = null;
+			toMEM = null;
 		}
 	}
 
@@ -411,6 +477,10 @@ public class ApexOOO {
 
 	// needs non pipelined 4 cycle latency
 	public void MulFU(Instruction instruction) {
+		if (multimer == 4) {
+			System.err.println("\n ==========>>>MUL COMPLETES");
+			mulcompletes = true;
+		}
 		System.err.println("in Mul fu");
 		int operand2 = 0;
 		operand2 = instruction.src2 != -1 ? instruction.src2_data : instruction.literal;
@@ -464,7 +534,7 @@ public class ApexOOO {
 	// MEM stage & its helper functions
 	public void doMEM() {
 		inMEMtoNext = inMEM;
-		inMEM = inEXtoNext;
+		inMEM = toMEM;
 		// System.err.print(" MEM " + inMEM + "\n");// inMEM.printRaw();
 		if (inMEM != null && inMEM.instr_id != null) {
 			System.err.println("Debugging NPE" + inMEM);
@@ -517,7 +587,7 @@ public class ApexOOO {
 
 			// code to writeback
 			System.err.print(" WB " + inWB + "\n");// inWB.printRaw();
-			// move last mem instruction here
+			// move last memory instruction here
 			// perform check if not a store too :remaining
 
 			switch (inWB.instr_id) {
@@ -536,6 +606,8 @@ public class ApexOOO {
 			case XOR:
 			case OR:
 				register[inWB.renamedDestination] = inWB.destination_data;
+				inWB.writtenBack = true;
+				registerValid[inWB.renamedDestination] = true;
 				break;
 
 			case STORE:
@@ -559,16 +631,30 @@ public class ApexOOO {
 			}
 
 		}
-		// logic for retirement
-		retirement();
 	}
 
 	// retirement logic for ROB, takes place during WB
 	public void retirement() {
-
-		// another case to free up register when we retire an instruction &
+		// TODO only case to free up register when we retire an instruction &
 		// register has been renamed.
-
+		// confirm if an instruction has to spend minimum one instruction in ROB
+		// or if it is possible then it can be directly committed to the ARF,
+		// right now it spends min 1 cycle in ROB
+		if (reorderBuffer.size() > 0 && reorderBuffer.peek().isReadyForCommit) {
+			Instruction retiring = reorderBuffer.remove();
+			if (retiring.destination != -1) {
+				ar_register[retiring.destination] = retiring.destination_data;
+				freelist.add(retiring.renamedDestination);
+				RATdecision[retiring.destination] = 0;
+				registerValid[retiring.renamedDestination] = false;
+			}
+		}
+		for (Instruction i : reorderBuffer) {
+			// hack, could have directly set the isReadyforCommit but then
+			// instruction would've directly committed to and not spent min 1
+			// cycle in ROB
+			i.isReadyForCommit = i.writtenBack;
+		}
 	}
 
 	// freeing up a register on commit of an instruction, during WB only
@@ -588,15 +674,27 @@ public class ApexOOO {
 		printRegisters();
 		printIssueQueue();
 		this.printStages();
+		// this.printFUs();
 		System.out.println("\n\nMemory(0 to 10):");
-
 		for (int i = 0; i < 10; i++) {
 			System.out.print(memory[i] + "\t");
 			if ((i + 1) % 10 == 0)
 				System.out.println();
 		}
+		printreorderbuffer();
+
+	}
+
+	private void printreorderbuffer() {
+		// TODO Auto-generated method stub
 		System.out.println("\n\nReorder Buffer:");
-		System.out.println(reorderBuffer);
+		// System.out.println(reorderBuffer);
+		// printing ready for commit bool val
+		System.out.print("\n[");
+		for (Instruction i : reorderBuffer) {
+			System.out.print(i + ":" + i.isReadyForCommit + ",");
+		}
+		System.out.print("]");
 
 	}
 
@@ -627,6 +725,10 @@ public class ApexOOO {
 		System.out.print("\tR13:" + register[13]);
 		System.out.print("\tR14:" + register[14]);
 		System.out.print("\tR15:" + register[15]);
+		System.out.format("\n\n%15s\t", "Allocated bit");
+		for (int i = 0; i < 16; i++) {
+			System.out.print(!freelist.contains(i) + "\t");
+		}
 		System.out.format("\n\n%15s\t", "Status bit");
 		for (int i = 0; i < 16; i++) {
 			System.out.print(registerValid[i] + "\t");
@@ -653,16 +755,31 @@ public class ApexOOO {
 	}
 
 	public void printFUs() {
-
+		System.out.print(String.format("%10s", "In Int FU\t"));
+		System.out.println(inExIntFU);
+		System.out.print(String.format("%10s", "In Mul FU\t"));
+		System.out.print(inExMulFU);
+		if (inExMulFU != null)
+			System.out.print("\tCycle: " + multimer);
+		System.out.println();
 	}
 
 	public void printRenameTable() {
 		System.out.println();
 		System.out.println("Registe Alias Table:");
-		System.out.println("R0->P" + RAT.get(0) + "\t\tR4->P" + RAT.get(4));
-		System.out.println("R1->P" + RAT.get(1) + "\t\tR5->P" + RAT.get(5));
-		System.out.println("R2->P" + RAT.get(2) + "\t\tR6->P" + RAT.get(6));
-		System.out.println("R3->P" + RAT.get(3) + "\t\tR7->P" + RAT.get(7));
+		char decide1, decide2;
+		decide1 = RATdecision[0] == 0 ? 'R' : 'P';
+		decide2 = RATdecision[4] == 0 ? 'R' : 'P';
+		System.out.println("R0->" + decide1 + RAT.get(0) + "\t\tR4->" + decide2 + RAT.get(4));
+		decide1 = RATdecision[1] == 0 ? 'R' : 'P';
+		decide2 = RATdecision[5] == 0 ? 'R' : 'P';
+		System.out.println("R1->" + decide1 + RAT.get(1) + "\t\tR5->" + decide2 + RAT.get(5));
+		decide1 = RATdecision[2] == 0 ? 'R' : 'P';
+		decide2 = RATdecision[6] == 0 ? 'R' : 'P';
+		System.out.println("R2->P" + decide1 + RAT.get(2) + "\t\tR6->" + decide2 + RAT.get(6));
+		decide1 = RATdecision[3] == 0 ? 'R' : 'P';
+		decide2 = RATdecision[7] == 0 ? 'R' : 'P';
+		System.out.println("R3->P" + decide1 + RAT.get(3) + "\t\tR7->" + decide2 + RAT.get(7));
 	}
 
 	public void printStages() {
@@ -671,8 +788,8 @@ public class ApexOOO {
 		System.out.print(inFetch + "\n");
 		System.out.print(String.format("%10s", "In decode\t"));
 		System.out.print(inDecode + "\n");
-		System.out.print(String.format("%10s", "In EX\t"));
-		System.out.print(inExIntFU + "\n");
+		System.out.print(String.format("%10s", "In EX\n"));
+		this.printFUs();
 		System.out.print(String.format("%10s", "In MEM\t"));
 		System.out.print(inMEM + "\n");
 		System.out.print(String.format("%10s", "In WB\t"));

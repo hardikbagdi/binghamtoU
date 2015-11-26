@@ -128,6 +128,7 @@ int main(){
 		printf("\nEnter number:\t");
 		scanf("%d",&x);
 		enqueue(queue,x);
+		// printf("tail pointer: %d\n", queue->list->tail->data.d);
 	}
 	printList(queue->list);
 	printf("Dequeuing\n");

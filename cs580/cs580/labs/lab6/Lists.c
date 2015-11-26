@@ -129,11 +129,11 @@ Vector* vectorDelete(Vector* v){
 
 
 //functions for linkedlist
-Node* createNode(){
+Node* createNode(Data d){
 	Node* node =  malloc(sizeof(Node));
 	if(node==NULL)
 		return;
-	node->data.d=-1;
+	node->data=d;
 	node->next=NULL;
 	node->prev=NULL;
 	return node;
@@ -143,6 +143,7 @@ List* createList(){
 	if(list==NULL)
 		return;
 	list->head= NULL;
+	list->tail=NULL;
 	return list;
 }
 Node* frontNode(List* list){
@@ -154,16 +155,16 @@ Node* insertNode(List* list,int index,Data d){
 	Node* prev;
 	//case when list is empty, just insert at the head
 	if(list->head==NULL){
-		Node* new = createNode();
-		new->data=d;
+		Node* new = createNode(d);
 		list->head=new;
+		list-> tail= new;
 		return new;
 	}
 	//case when insert at the head itself
 	if(index==0){
 	// printf("inserting at index 0\n");
-		Node* new = createNode();
-		new->data=d;
+		Node* new = createNode(d);
+		
 		list->head->prev=new;
 		new->next=list->head;
 		list->head=new;
@@ -172,15 +173,16 @@ Node* insertNode(List* list,int index,Data d){
 	//other cases
 	int counter=0;
 	int length=0;
-	Node* new = createNode();
-	new->data=d;
+	Node* new = createNode(d);
+
 	while(curr!=NULL){
 		
 		length++;
 		curr=curr->next;
 	}
+	// printf("length: %d\n",length );
 	//if in between the list
-	if(length>=index){
+	if(length>index){
 		
 		curr= list->head;
 		while(counter<(index-1)){
@@ -202,6 +204,7 @@ Node* insertNode(List* list,int index,Data d){
 		}
 		curr->next= new;
 		new->prev=curr;
+		list->tail = new;
 	}
 }
 int removeNode(List* list,int index){
@@ -218,6 +221,8 @@ int removeNode(List* list,int index){
 		returnVal=freeup->data.d;
 		if(list->head->next!=NULL)
 			list->head->next->prev=NULL;
+		else
+			list->tail=NULL;
 		list->head=list->head->next;
 		deleteNode(freeup);
 		return returnVal;
@@ -234,10 +239,11 @@ int removeNode(List* list,int index){
 		returnVal = list->head->data.d;
 		deleteNode(list->head);
 		list->head=NULL;
+		list->tail=NULL;
 		return returnVal;
 	}
 	// index out of bounds, delete last element
-	if(index>length){
+	if(index>=length){
 		curr= list->head;
 		while(curr!=NULL){
 			prev=curr;
@@ -246,6 +252,7 @@ int removeNode(List* list,int index){
 		freeup=prev;
 		curr=prev->prev;
 		curr->next=NULL;
+		list->tail=curr;
 		returnVal=freeup->data.d;
 		deleteNode(freeup);
 		return returnVal;
@@ -334,15 +341,8 @@ int searchBackward(List* list, int value){
 	if(list==NULL)
 		-1;
 	int index=0;
-	Node* curr = list->head;
-	Node* last;
-	//traverse to end of the list
-	while(curr!=NULL){
-		last=curr;
-		curr=curr->next;
-	}
-	curr=last;
-	//move backwards  & compare
+	Node* curr = list->tail;
+	
 	while(curr!=NULL && curr->data.d!=value){
 		curr=curr->prev;
 		index++;

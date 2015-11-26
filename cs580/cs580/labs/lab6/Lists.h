@@ -21,6 +21,7 @@ typedef struct _Node
 
 typedef struct _List{
 	Node* head;
+	Node* tail;
 }List;
 
 typedef struct _Stack
@@ -44,7 +45,7 @@ void vectorInsertincremental(Vector* array,int index,Data value);
 
 
 //functions for linkedlist
-Node* createNode();
+Node* createNode(Data);
 List* createList();
 Node* frontNode(List*);
 Node* insertNode(List*,int,Data);

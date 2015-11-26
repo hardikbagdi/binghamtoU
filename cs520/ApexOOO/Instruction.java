@@ -1,45 +1,50 @@
 enum InstructionType {
-	ADD, SUB, MUL, AND, OR, XOR, MOVC, MOV, LOAD, STORE, BZ, BNZ, JUMP, BAL, HALT
+	ADD, SUB, MUL, AND, OR, XOR, MOVC, MOV, LOAD, STORE, BZ, BNZ, JUMP, BAL, HALT // 15
+																					// instruction
 }
 
 public class Instruction {
-	// enum type{MOV,JUMP};
 	// falg to detect if contains any data or not
 	public boolean contains;
 	// instruction type and corresponding pnumonic
-
 	public InstructionType instr_id = null;
-	public String inst_name = "";
-	// dest
+	// redundant. Intruction Type in string
+	public String inst_name;
+	// dest- architectural register. used for renaming register in decode and
+	// also while commiting ot ARF
 	public int destination = -1;
-	//renamed destination register
+	// renamed destination register used from decoding to ROB
 	public int renamedDestination = -1;
-	//to hold destination data till WB
+	// to hold destination data till in ROB
 	public int destination_data = -1;
-	// src
+	// src Arch registers
 	public int src1 = -1, src2 = -1;
-	//renamed Source physical registers
+	// renamed Source physical registers
 	public int renamedSrc1 = -1, renamedSrc2 = -1;
-	//data read out in Decode or while in IQ
+	// data read out in Decode or while in IQ
 	public int src1_data = -1, src2_data = -1;
-	// literal
+	// literal value if any
 	public int literal = -1;
-	
-	//for issue queue ready bit for whole instruction
+	// for issue queue ready bit for whole instruction, checks sources and not
+	// FU availability.
 	public boolean isReadyForIssue;
-	//for retirement logic from ROB
+	// for retirement logic from ROB
 	public boolean isReadyForCommit;
-	//ready bits for sources in forwarding.
-	public boolean src1valid,src2valid;
-
-	// plain ascii representation of the instructions
+	// ready bits for sources in forwarding.
+	public boolean src1valid, src2valid;
+	// ready bit if destination has been evaluated
+	public boolean destvalid;
+	// plain ASCII representation of the instructions
 	public String rawString;
-	// renamed instruction
-	public String renamedString;
+	// renamed instruction i.e. all arch registers replaced by physical
+	// registers
+	public String renamedString = null;
 	// Address in Memory
-	public int address; // address start from 20,000 onwards, incremented by 1
-						// everytime
-	// no of operands of a given instruction
+	// address start from 20,000 onwards, incremented by 1 every time
+	public int address;
+	// type of FU required. Selection between Int FU(0) and Mul FU(1)
+	public int FUtype;
+	// no of operands of a given instruction, bug checking only
 	int noOfOperands;
 
 	public Instruction() {
@@ -67,7 +72,10 @@ public class Instruction {
 	}
 
 	public String toString() {
-
-		return (rawString);
+		if (renamedString == null)
+			return (rawString);
+		else {
+			return renamedString;
+		}
 	}
 }

@@ -4,9 +4,11 @@ import java.io.*;
 public class ApexOOO {
 	// CPU representations
 	public int PSW_Z = -1;
-	// physical regusters
+	// arch registers
+	public int ar_register[];
+	// physical registers
 	public int register[];
-	// status array
+	// status array for the ROB physical register
 	public boolean registerValid[];
 	// renamed array
 	public boolean renamed[];
@@ -14,6 +16,7 @@ public class ApexOOO {
 	public int invaliditySetBy[];
 	// memory
 	public int memory[];
+	// PC coutner - next fetch
 	public int GlobalPC;
 	// hold the instructions of the input file
 	Instruction[] instructions;
@@ -28,30 +31,31 @@ public class ApexOOO {
 	Queue<Integer> freelist;
 	// Register Alias Table
 	HashMap<Integer, Integer> RAT;
-	//bit to decide if poitning to ARF or PRF
-	int[] RATdecision; // 0 means ARF  , 1 means PRF
+	// bit to decide if pointing to ARF or PRF
+	int[] RATdecision; // 0 means ARF , 1 means PRF
 	// hold pipeline details in real time
-	public Instruction inFetch = null, inDecode = null, inEX = null, inMEM = null, inWB = null;
+	public Instruction inFetch = null, inDecode = null, toIntFu = null, toMulFU = null, inExIntFU = null, inExMulFU = null, inMEM = null, inWB = null;
 	// passing on. work as pipeline registers.
 	public Instruction inFetchtoNext = null, inDecodetoNext = null, inEXtoNext = null, inMEMtoNext = null;
-
 	// various flags to handle message passing
 	public boolean stalled = false;
 
-	// free up register method in Decode(case 2)
+	// free up register method in Decode(case 2) TODO verify if free up possible in this case
 	public boolean freeUpRegisterInDecode = false;
 	public int RegisterToFree = -1;
+	// following not used currently
 	boolean stallFetch = false, stallDecode = false, stallEX = false, stallMEM = false, stallWB = false;
+	// take input for no of cycles to simulate.
+	public int userInputCycles;
+	// used to stop incrementing PC once end of instructions is reached
+	boolean flagEND = false;
 
-	public int userInputCycles; // take input for no of cycles to simulate.
-	boolean flagEND = false; // used to stop incrementing PC once end of
-								// instructions is reached
-
+	// keeps track of Mul FU cycles - non-pipelined
 	// constructor
 	public ApexOOO() {
 		GlobalPC = 20000;
 		instructions = new Instruction[1000];
-
+		ar_register = new int[8];
 		register = new int[16];
 		registerValid = new boolean[16];
 		renamed = new boolean[16];
@@ -72,9 +76,10 @@ public class ApexOOO {
 		RAT = new HashMap<Integer, Integer>();
 		for (int i = 0; i < 8; i++) {
 			RAT.put(i, i);
-			RATdecision[]
+			RATdecision[i] = 0; // initially all commited values. So,everything
+			// points to ARF
 		}
-		
+
 		for (int i = 8; i < 16; i++) {
 			freelist.add(i);
 		}
@@ -85,36 +90,8 @@ public class ApexOOO {
 
 		for (int i = 0; i < 9; i++)
 			invaliditySetBy[i] = -1;
-		for (int i = 0; i < 16; i++)
-			reorderBuffer.add(null);
+		stalled = false;
 
-	}
-	
-	public void renamingUnit(Instruction instruction) {
-		if (instruction.src1 != -1) {
-			instruction.renamedSrc1 = RAT.get(instruction.src1);
-		}
-		if (instruction.src2 != -1) {
-			instruction.renamedSrc2 = RAT.get(instruction.src2);
-
-		}
-		if (instruction.destination != -1) {
-			int x = freelist.remove();
-			int currentStandin = RAT.get(instruction.destination);
-			RAT.put(instruction.destination,x );
-			instruction.renamedDestination = x;
-			
-			//below code will be removed as we will have to commit everything
-			if (registerValid[currentStandin]) {
-				freeUpRegisterInDecode = true; // opportunity to free up a
-												// register if the the old stand
-												// in has been renamed (Case 1)
-				RegisterToFree = currentStandin;
-			}
-			else{
-				freeUpRegisterInDecode=false;
-			}
-		}
 	}
 
 	public void processCycles(int noOfCycles) {
@@ -129,6 +106,7 @@ public class ApexOOO {
 			}
 			doFetch();
 			doDecode();
+			issueQueueCheckIssueAndForward();
 			doEX();
 			doMEM();
 			doWB();
@@ -137,37 +115,21 @@ public class ApexOOO {
 		}
 	}
 
-	public boolean checkDecodeStall(Instruction inDecode) {
-		if (inDecode == null)
-			return false;
-		if (inDecode.src1 != -1 && !registerValid[inDecode.src1]) {
-			return true;
-		}
-		if (inDecode.src2 != -1 && !registerValid[inDecode.src2]) {
-			return true;
-		}
-		if (inDecode.destination != -1 && !registerValid[inDecode.destination]) {
-			return true;
-		}
-		return false;
-	}
-
+	// fetch stage
 	public void doFetch() {
-
-		// System.out.println("-->(stalled"+stalled);
-		// System.out.println("-->(flagEND"+flagEND);
+		System.out.println("===Stalled from fetch:" + stalled);
 		if (flagEND && stalled)
 			return;
 
 		if (stalled)
 			return;
-		
+
 		inFetchtoNext = inFetch;
 		if (flagEND)
 			inFetch = null;
+		inFetchtoNext = inFetch;
 		inFetch = this.instructions[GlobalPC - 20000];
-		// System.out.print(GlobalPC+" Fetch "+inFetch);//inFetch.printRaw();
-		// check if there is a next instruction. if yes, then incremenet the
+		// check if there is a next instruction. if yes, then increment the
 		// counter. else increment the counter
 		// and set end of file flag. we will never increment the counter beyond
 		// this now.
@@ -182,88 +144,229 @@ public class ApexOOO {
 		}
 	}
 
-	public void freeUpRegister(int r) {
-		register[r] = -1;
-		registerValid[r] = false;
-		renamed[r] = false;
-		freelist.add(r);
-	}
-
+	// decode stage followed by helper functions for it
 	public void doDecode() {
-		
-		//check if free slot in IQ and a free register is avalable,
-		//other wise stall
-		if(currentSizeIQ==8 || freelist.size()){
-			
+
+		// these check SHOULD NOT BE PERFORMED FOR JUMP, BZ and may be a few
+		// others
+		// check if free slot in IQ and a free register is available,
+		// other wise stall
+		System.out.println("===Stalled from decode:" + stalled);
+
+		// stalled = checkDecodeStall(inDecode);
+		if (!stalled) {
+			inDecodetoNext = inDecode;
+			inDecode = inFetchtoNext;
+			if (inDecode != null) {
+
+				if (currentSizeIQ == 8 || reorderBuffer.size() == 16) {
+					System.err.println("no IQ or ROB, current IQ size:" + currentSizeIQ + " reorder buffer size: "
+							+ reorderBuffer.size());
+					stalled = true;
+					return;
+
+				} else if (inDecode.destination != -1 && freelist.size() == 0) {
+					System.err.println("no free register");
+					stalled = true;
+					return;
+				}
+				renameAndRead(inDecode);
+			}
+		} else {
 			return;
 		}
-		
-		// logic to free up a register case 2
-		if (freeUpRegisterInDecode) {
-			freeUpRegister(RegisterToFree);
+
+		// logic to free up a register case 2 -- this will never take place as
+		// every instruction which has a destination register will WB to ARF on
+		// commit
+		// if (freeUpRegisterInDecode) {
+		// freeUpRegister(RegisterToFree);
+		// }
+	}
+
+	// executes only if Decode not stalling. renames and attempts to read
+	// sources. sets flags. renames destination and allocate a PR. update RAT.
+	// allocate IQ & ROB
+	public void renameAndRead(Instruction instruction) {
+		// Building the renamed instructions
+		StringBuilder sb = new StringBuilder();
+		sb.append(instruction.inst_name + " ");
+		// rename and try to read sources
+		if (instruction.src1 != -1) {
+			instruction.renamedSrc1 = RAT.get(instruction.src1);
+			if (RATdecision[instruction.renamedSrc1] == 0) {
+				instruction.src1_data = ar_register[instruction.renamedSrc1];
+			} else {
+				if (registerValid[instruction.renamedSrc1] == true) {
+					instruction.src1_data = register[instruction.renamedSrc1];
+					instruction.src1valid = true;
+				} else {
+					instruction.src1valid = false;
+				}
+			}
+		}
+		if (instruction.src2 != -1) {
+			instruction.renamedSrc2 = RAT.get(instruction.src2);
+			if (RATdecision[instruction.renamedSrc2] == 0) {
+				instruction.src2_data = ar_register[instruction.renamedSrc2];
+			} else {
+				if (registerValid[instruction.renamedSrc2] == true) {
+					instruction.src2_data = register[instruction.renamedSrc2];
+					instruction.src2valid = true;
+				} else {
+					instruction.src2valid = false;
+				}
+			}
+		}
+		// rename destination and update RAT other flags
+		if (instruction.destination != -1) {
+			// TODO verify allocation of various resources
+			int x = freelist.remove();
+			renamed[x] = false;
+			registerValid[x] = false;
+			int currentStandin = RAT.get(instruction.destination);
+			RAT.put(instruction.destination, x);
+			instruction.renamedDestination = x;
+			renamed[currentStandin] = true;
+			sb.append("P" + instruction.renamedDestination);
+			if (instruction.src1 != -1) {
+				sb.append(" P" + instruction.renamedSrc1);
+			}
+			// below 'if' will be removed as we will have to commit everything
+
+			// if (registerValid[currentStandin]) {
+			// freeUpRegisterInDecode = true; // opportunity to free up a
+			// // register if the the old stand
+			// // in has been renamed (Case 1)
+			// RegisterToFree = currentStandin;
+			// } else {
+			// freeUpRegisterInDecode = false;
+			// }
+		}
+		if (instruction.src2 != -1) {
+			sb.append(" P" + instruction.renamedSrc2);
+		}
+		if (instruction.literal != -1) {
+			sb.append(" P" + instruction.literal);
+		}
+		instruction.renamedString = sb.toString();
+		// TODO renaming the instruction string. not handled for X right now.
+		// set renamed string
+		// set issuable condition if all the required sources have been read in
+		instruction.isReadyForIssue = true;
+		// set isIssuable if both the sources are ready.
+		if (instruction.src1 != -1)
+			instruction.isReadyForIssue = instruction.src1valid;
+		if (instruction.src2 != -1)
+			instruction.isReadyForIssue &= instruction.src2valid;
+
+		// put into the empty slot in the IQ
+		for (int i = 0; i < 8; i++) {
+			if (issuequeue[i] == null) {
+				issuequeue[i] = instruction;
+				break;
+			}
+
+		}
+		++currentSizeIQ;
+		// put into the reorder buffer
+		reorderBuffer.add(instruction);
+
+	}
+
+	// put items in issue queue and check for forwarded data in each cycle and
+	// issue instructions
+	public void issueQueueCheckIssueAndForward() {
+		// TODO handle stalls in EX due to resource contention. when EX stalls,
+		// nothing goes from IQ to EX
+		Instruction instruction = null;
+		// check forwarded data and read in wherever required.
+		for (int i = 0; i < 8; i++) {
+
+		}
+		// check instructions ready for issue
+		for (int i = 0; i < 8; i++) {
+			// set to null, just a pipeline register
+			toIntFu = null;
+			instruction = issuequeue[i];
+			instruction.isReadyForIssue = true;
+			// set isIssuable if both the sources are ready.
+			if (instruction.src1 != -1)
+				instruction.isReadyForIssue = instruction.src1valid;
+			if (instruction.src2 != -1)
+				instruction.isReadyForIssue &= instruction.src2valid;
+			if (instruction.isReadyForIssue && instruction.FUtype == 0 && toIntFu != null) {
+				// TODO issue to Int FU unit
+				toIntFu = issuequeue[i];
+				issuequeue[i] = null;
+			}
+
 		}
 	}
 
 	public void doEX() {
 		if (!stallEX && !stallMEM && !stallWB) {
-			inEXtoNext = inEX;
-			inEX = inDecodetoNext;
-			if (inEX != null && inEX.instr_id != null) {
-				System.err.print(" EX " + inEX);// inEX.printRaw();
-				//main execution 
-				switch (inEX.instr_id) {
+			inEXtoNext = inExIntFU;
+
+			inExIntFU = inDecodetoNext;
+			if (inExIntFU != null && inExIntFU.instr_id != null) {
+				System.err.print(" EX " + inExIntFU);// inEX.printRaw();
+				// main execution
+				switch (inExIntFU.instr_id) {
 				// do nothing
 				case MOVC:
 				case MOV:
+					Mov(inExIntFU);
+					break;
 				case LOAD:
 				case STORE:
 				case HALT:
 					break;
 				case ADD:
-					AddFU(inEX);
+					AddFU(inExIntFU);
 					break;
 				case MUL:
-					MulFU(inEX);
+					MulFU(inExMulFU);
 					break;
 				case SUB:
-					SubFU(inEX);
+					SubFU(inExIntFU);
 					break;
 				case AND:
-					AndFU(inEX);
+					AndFU(inExIntFU);
 					break;
 				case XOR:
-					XorFU(inEX);
+					XorFU(inExIntFU);
 					break;
 				case OR:
-					OrFU(inEX);
+					OrFU(inExIntFU);
 					break;
 				case BNZ:
 					if (PSW_Z != 0) {
 						branchFlush();
-						GlobalPC = inEX.address + inEX.literal; // relative
-																// addressign
+						GlobalPC = inExIntFU.address + inExIntFU.literal; // relative
+						// Addressing
 					}
 					break;
 				case BZ:
 					if (PSW_Z == 0) {
 						branchFlush();
 
-						GlobalPC = inEX.address + inEX.literal;
+						GlobalPC = inExIntFU.address + inExIntFU.literal;
 
 					}
 					break;
 				case BAL:
 					branchFlush();
 					stalled = false; // hack. can go wrong!!!
-					register[8] = inEX.address + 1;
-					GlobalPC = register[inEX.destination] + inEX.literal; // absolute
-																			// addressing
+					register[8] = inExIntFU.address + 1;
+					GlobalPC = register[inExIntFU.destination] + inExIntFU.literal; // absolute
+					// addressing
 					break;
 				case JUMP:
 					branchFlush();
 					stalled = false; // hack. can go wrong!!!
-					GlobalPC = register[inEX.destination] + inEX.literal;// absolute
-																			// addressing
+					GlobalPC = register[inExIntFU.destination] + inExIntFU.literal;// absolute
+					// addressing
 					break;
 
 				}
@@ -274,16 +377,17 @@ public class ApexOOO {
 	}
 
 	public void Mov(Instruction instruction) {
-		if(instruction.instr_id == InstructionType.MOVC){
+		if (instruction.instr_id == InstructionType.MOVC) {
 			instruction.destination_data = instruction.literal;
-		}
-		else if (instruction.instr_id == InstructionType.MOV) {
+		} else if (instruction.instr_id == InstructionType.MOV) {
 			instruction.destination_data = register[instruction.renamedSrc1];
 		}
 	}
+
+	// for squashing instruction upon branch resolutions
 	public void branchFlush() {
 		for (int i = 0; i < 8; i++) {
-			if (invaliditySetBy[i] == inDecode.address || invaliditySetBy[i] == inEX.address) {
+			if (invaliditySetBy[i] == inDecode.address || invaliditySetBy[i] == inExIntFU.address) {
 				invaliditySetBy[i] = -1;
 				registerValid[i] = true;
 			}
@@ -305,6 +409,7 @@ public class ApexOOO {
 			PSW_Z = -1;
 	}
 
+	// needs non pipelined 4 cycle latency
 	public void MulFU(Instruction instruction) {
 		System.err.println("in Mul fu");
 		int operand2 = 0;
@@ -356,10 +461,11 @@ public class ApexOOO {
 			PSW_Z = -1;
 	}
 
+	// MEM stage & its helper functions
 	public void doMEM() {
 		inMEMtoNext = inMEM;
 		inMEM = inEXtoNext;
-		System.err.print(" MEM " + inMEM + "\n");// inMEM.printRaw();
+		// System.err.print(" MEM " + inMEM + "\n");// inMEM.printRaw();
 		if (inMEM != null && inMEM.instr_id != null) {
 			System.err.println("Debugging NPE" + inMEM);
 			switch (inMEM.instr_id) {
@@ -404,6 +510,7 @@ public class ApexOOO {
 		}
 	}
 
+	// WB stage
 	public void doWB() {
 		inWB = inMEMtoNext;
 		if (inWB != null && inWB.instr_id != null) {
@@ -411,7 +518,7 @@ public class ApexOOO {
 			// code to writeback
 			System.err.print(" WB " + inWB + "\n");// inWB.printRaw();
 			// move last mem instruction here
-			// perform check if not a store too :remainng
+			// perform check if not a store too :remaining
 
 			switch (inWB.instr_id) {
 			case HALT:
@@ -452,77 +559,58 @@ public class ApexOOO {
 			}
 
 		}
-	//logic for retirement
+		// logic for retirement
 		retirement();
 	}
 
-	
+	// retirement logic for ROB, takes place during WB
 	public void retirement() {
-		
-		
-		//another case to free up register when we retire an instruction & register has been renamed.
-		
-	}
-	public void printIssueQueue() {
-		System.out.println("Issue Queue:");
-		for (int i = 0; i < 8; i++)
-			System.out.println(issuequeue);
-	}
 
-	public void printFUs() {
+		// another case to free up register when we retire an instruction &
+		// register has been renamed.
 
 	}
 
-	public void printRenameTable() {
-		System.out.println();
-		System.out.println("Registe Alias Table:");
-		System.out.println("R0->P" + RAT.get(0) + "\t\tR4->P" + RAT.get(4));
-		System.out.println("R1->P" + RAT.get(1) + "\t\tR5->P" + RAT.get(5));
-		System.out.println("R2->P" + RAT.get(2) + "\t\tR6->P" + RAT.get(6));
-		System.out.println("R3->P" + RAT.get(3) + "\t\tR7->P" + RAT.get(7));
+	// freeing up a register on commit of an instruction, during WB only
+	public void freeUpRegister(int r) {
+		register[r] = -1;
+		registerValid[r] = false;
+		renamed[r] = false;
+		freelist.add(r);
 	}
 
-	public void PrintMenuWithInit() {
-		System.out.println("\nOptions:\n1:\tInitialize- initializes the processor to boot up state");
-		System.out.println("2:\tSimulate: Performs initialization and simulate n cycles.\n");
-		System.out.println("3.\tDisplay: Content of all memory and other relevant info.");
-		System.out.print("4.\tShutDown.\nInput:\t");
-
-	}
-
-	public void PrintMenu() {
-		System.out.println("\nOptions:\n");
-		System.out.println("1:\tSimulate: Simulate n cycles. \n");
-		System.out.println("2.\tDisplay: Content of all memory and other relevant info.");
-		System.out.print("3.\tShutDown.\nInput:\t");
-
-	}
-
-	public void printStages() {
-		System.out.println();
-		System.out.print(String.format("%10s", "In fetch\t"));
-		System.out.print(inFetch + "\n");
-		System.out.print(String.format("%10s", "In decode\t"));
-		System.out.print(inDecode + "\n");
-		System.out.print(String.format("%10s", "In EX\t"));
-		System.out.print(inEX + "\n");
-		System.out.print(String.format("%10s", "In MEM\t"));
-		System.out.print(inMEM + "\n");
-		System.out.print(String.format("%10s", "In WB\t"));
-		System.out.print(inWB + "\n");
-	}
-
-	public void processorInit() {
-		System.out.println("===Processor initialized===");
-		GlobalPC = 20000;
-	}
-
+	// TODO add forwarded tag and data value
+	// display function and helpers
 	public void displayAll() {
 		System.out.println("\n\n\nProgram Counter:" + GlobalPC);
-		System.out.println("\n PSW-Zero(only 0 is 0):" + PSW_Z);
+		System.out.println("\nPSW-Zero(only 0 is 0):" + PSW_Z);
 		printRenameTable();
-		System.out.println("\n Physical Registers:");
+		printRegisters();
 		printIssueQueue();
+		this.printStages();
+		System.out.println("\n\nMemory(0 to 10):");
+
+		for (int i = 0; i < 10; i++) {
+			System.out.print(memory[i] + "\t");
+			if ((i + 1) % 10 == 0)
+				System.out.println();
+		}
+		System.out.println("\n\nReorder Buffer:");
+		System.out.println(reorderBuffer);
+
+	}
+
+	public void printRegisters() {
+		System.out.println("\nArchtectural Registers:");
+		System.out.print("R0:" + ar_register[0]);
+		System.out.print("\tR1:" + ar_register[1]);
+		System.out.print("\tR2:" + ar_register[2]);
+		System.out.print("\tR3:" + ar_register[3]);
+		System.out.print("\tR4:" + ar_register[4]);
+		System.out.print("\tR5:" + ar_register[5]);
+		System.out.print("\tR6:" + ar_register[6]);
+		System.out.print("\tR7:" + ar_register[7]);
+		System.out.format("\n%15s\t", "Phy Register");
 		System.out.print("R0:" + register[0]);
 		System.out.print("\tR1:" + register[1]);
 		System.out.print("\tR2:" + register[2]);
@@ -539,20 +627,78 @@ public class ApexOOO {
 		System.out.print("\tR13:" + register[13]);
 		System.out.print("\tR14:" + register[14]);
 		System.out.print("\tR15:" + register[15]);
-		System.out.print("\n");
+		System.out.format("\n\n%15s\t", "Status bit");
 		for (int i = 0; i < 16; i++) {
 			System.out.print(registerValid[i] + "\t");
 		}
-		System.out.println("\n\nMemory(0 to 99):");
-
-		for (int i = 0; i < 100; i++) {
-			System.out.print(memory[i] + "\t");
-			if ((i + 1) % 10 == 0)
-				System.out.println();
+		System.out.format("\n%15s\t", "Renamed bit");
+		for (int i = 0; i < 16; i++) {
+			System.out.print(renamed[i] + "\t");
 		}
-		this.printStages();
-		System.out.println("\n\nReorder Buffer:");
-		System.out.println(reorderBuffer);
+
+	}
+
+	// Various print functions
+	public void printIssueQueue() {
+		System.out.println("\n\nIssue Queue:\n");
+		for (int i = 0; i < 8; i++) {
+
+			System.out.print(issuequeue[i]);
+			if (issuequeue[i] != null) {
+				System.out.print("\tIssuable:" + issuequeue[i].isReadyForIssue);
+			}
+			System.out.print("\n");
+		}
+
+	}
+
+	public void printFUs() {
+
+	}
+
+	public void printRenameTable() {
+		System.out.println();
+		System.out.println("Registe Alias Table:");
+		System.out.println("R0->P" + RAT.get(0) + "\t\tR4->P" + RAT.get(4));
+		System.out.println("R1->P" + RAT.get(1) + "\t\tR5->P" + RAT.get(5));
+		System.out.println("R2->P" + RAT.get(2) + "\t\tR6->P" + RAT.get(6));
+		System.out.println("R3->P" + RAT.get(3) + "\t\tR7->P" + RAT.get(7));
+	}
+
+	public void printStages() {
+		System.out.println();
+		System.out.print(String.format("%10s", "In fetch\t"));
+		System.out.print(inFetch + "\n");
+		System.out.print(String.format("%10s", "In decode\t"));
+		System.out.print(inDecode + "\n");
+		System.out.print(String.format("%10s", "In EX\t"));
+		System.out.print(inExIntFU + "\n");
+		System.out.print(String.format("%10s", "In MEM\t"));
+		System.out.print(inMEM + "\n");
+		System.out.print(String.format("%10s", "In WB\t"));
+		System.out.print(inWB + "\n");
+	}
+
+	// initializing processor. TODO copy over from constructor
+	public void processorInit() {
+		System.out.println("===Processor initialized===");
+		GlobalPC = 20000;
+	}
+
+	// command line user interfacing- 4 functions
+	public void PrintMenuWithInit() {
+		System.out.println("\nOptions:\n1:\tInitialize- initializes the processor to boot up state");
+		System.out.println("2:\tSimulate: Performs initialization and simulate n cycles.\n");
+		System.out.println("3.\tDisplay: Content of all memory and other relevant info.");
+		System.out.print("4.\tShutDown.\nInput:\t");
+
+	}
+
+	public void PrintMenu() {
+		System.out.println("\nOptions:\n");
+		System.out.println("1:\tSimulate: Simulate n cycles. \n");
+		System.out.println("2.\tDisplay: Content of all memory and other relevant info.");
+		System.out.print("3.\tShutDown.\nInput:\t");
 
 	}
 
@@ -603,11 +749,11 @@ public class ApexOOO {
 		return input;
 	}
 
+	// converting input file into an Instruction[]
 	public void complieInstructions(Instruction instruction) throws Exception {
-		int literal = 0;
 		String d;
-		int noOfOperands = 0;
 		String string = instruction.rawString;
+		instruction.FUtype = 0;
 		StringTokenizer tokenizer = new StringTokenizer(string, " ");
 		instruction.inst_name = tokenizer.nextToken();
 		// hack for EX-OR to be added
@@ -621,8 +767,10 @@ public class ApexOOO {
 		if (instruction.instr_id == InstructionType.HALT)
 			return;
 
+		if (instruction.instr_id == InstructionType.MUL)
+			instruction.FUtype = 1;
 		if (tokenizer.hasMoreTokens()) {
-			if(instruction.instr_id == InstructionType.JUMP){
+			if (instruction.instr_id == InstructionType.JUMP) {
 				d = tokenizer.nextToken();
 				if (d.equals("X")) {
 					instruction.src1 = 16;
@@ -633,20 +781,18 @@ public class ApexOOO {
 				} else {
 					instruction.src1 = Integer.parseInt(d.substring(1));
 				}
-			}
-			else {
-				
-			
-			d = tokenizer.nextToken();
-			if (d.equals("X")) {
-				instruction.destination = 16;
-			} else if (d.charAt(0) != 'R') {
-				instruction.literal = Integer.parseInt(d);
-				// System.out.println("JUMP/BZ/BNZ" + d);
-				return;
 			} else {
-				instruction.destination = Integer.parseInt(d.substring(1));
-			}
+
+				d = tokenizer.nextToken();
+				if (d.equals("X")) {
+					instruction.destination = 16;
+				} else if (d.charAt(0) != 'R') {
+					instruction.literal = Integer.parseInt(d);
+					// System.out.println("JUMP/BZ/BNZ" + d);
+					return;
+				} else {
+					instruction.destination = Integer.parseInt(d.substring(1));
+				}
 			}
 		}
 
@@ -673,6 +819,7 @@ public class ApexOOO {
 		}
 	}
 
+	// process the input file.
 	public void processInput() {
 		BufferedReader br;
 		String line;
@@ -702,6 +849,7 @@ public class ApexOOO {
 	}
 
 	public static void main(String[] args) {
+		// err log file, add redirection when complete TODO
 		// try{
 		// PrintStream ps = new PrintStream("log");
 		// System.setErr(ps);
@@ -725,7 +873,7 @@ public class ApexOOO {
 			a.PrintMenu();
 			if (a.userInput(s) == 1)
 				a.processCycles(a.userInputCycles);
-			// a.displayAll();
+			a.displayAll();
 		}
 	}
 }

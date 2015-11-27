@@ -1,5 +1,12 @@
-import java.util.*;
-import java.io.*;
+import java.io.BufferedReader;
+import java.io.FileNotFoundException;
+import java.io.FileReader;
+import java.io.IOException;
+import java.util.HashMap;
+import java.util.LinkedList;
+import java.util.Queue;
+import java.util.Scanner;
+import java.util.StringTokenizer;
 
 public class ApexOOO {
 	// CPU representations
@@ -35,7 +42,7 @@ public class ApexOOO {
 	int[] RATdecision; // 0 means ARF , 1 means PRF
 	// hold pipeline details in real time
 	public Instruction inFetch = null, inDecode = null, toIntFu = null, toMulFU = null, inExIntFU = null,
-			inExMulFU = null, inMEM = null, inWB = null;
+			inExMulFU = null, inMEM = null, inMEMLS = null, inWB = null;
 	// passing on. work as pipeline registers.
 	public Instruction inFetchtoNext = null, inDecodetoNext = null, toMEM = null, inMEMtoNext = null;
 	// various flags to handle message passing
@@ -57,6 +64,21 @@ public class ApexOOO {
 	// signals that MUL completed in the current cycle(and hence has to be
 	// forwarded to MEM
 	public boolean mulcompletes;
+	// timer for MEM stage
+	public int lstimer = 0;
+	// Flag to signal completion of a memory operations
+	public boolean lscompletes = false;
+	// forwarding data
+	// tag is the register(physical) number being forwarded
+	// value is the data being
+	public int forwardedFromIntEXtag;
+	public int forwardedFromIntEXValue;
+	public int forwardedFromMulEXtag;
+	public int forwardedFromMulEXValue;
+	public int forwardedFromMEMEXtag;
+	public int forwardedFromMEMEXValue;
+	public int forwardedFromWBDtag;
+	public int forwardedFromWBValue;
 
 	// constructor
 	public ApexOOO() {
@@ -127,6 +149,8 @@ public class ApexOOO {
 	// fetch stage
 	public void doFetch() {
 		System.out.println("===Stalled from fetch:" + stalled);
+		System.out.println("===flagendfrom fetch:" + flagEND);
+
 		if (flagEND && stalled)
 			return;
 
@@ -136,8 +160,12 @@ public class ApexOOO {
 		inFetchtoNext = inFetch;
 		if (flagEND)
 			inFetch = null;
-		inFetchtoNext = inFetch;
-		inFetch = this.instructions[GlobalPC - 20000];
+		// inFetchtoNext = inFetch;
+		// TODO verify below test
+		// the test is- create a new object of instruction every time. this
+		// solves the problem of rename and branch thing
+		// inFetch = this.instructions[GlobalPC - 20000];
+		inFetch = createInstruction(this.instructions[GlobalPC - 20000]);
 		// check if there is a next instruction. if yes, then increment the
 		// counter. else increment the counter
 		// and set end of file flag. we will never increment the counter beyond
@@ -153,6 +181,25 @@ public class ApexOOO {
 		}
 	}
 
+	private Instruction createInstruction(Instruction instruction) {
+		// TODO Auto-generated method stub
+		if (instruction == null || instruction.instr_id == null) {
+			return null;
+		}
+		System.err.println("create instruction:" + instruction);
+		Instruction newinst = new Instruction();
+		newinst.rawString = new String(instruction.rawString);
+		newinst.FUtype = instruction.FUtype;
+		newinst.inst_name = instruction.inst_name;
+		newinst.instr_id = instruction.instr_id;
+		newinst.src1 = instruction.src1;
+		newinst.src2 = instruction.src2;
+		newinst.destination = instruction.destination;
+		newinst.literal = instruction.literal;
+		return newinst;
+	}
+
+	// TODO once stalled, no logic to undo stall. #warning
 	// decode stage followed by helper functions for it
 	public void doDecode() {
 
@@ -162,12 +209,11 @@ public class ApexOOO {
 		// other wise stall
 		System.out.println("===Stalled from decode:" + stalled);
 
-		// stalled = checkDecodeStall(inDecode);
+		stalled = checkDecodeStall(inDecode);
 		if (!stalled) {
 			inDecodetoNext = inDecode;
 			inDecode = inFetchtoNext;
 			if (inDecode != null) {
-
 				if (currentSizeIQ == 8 || reorderBuffer.size() == 16) {
 					System.err.println("no IQ or ROB, current IQ size:" + currentSizeIQ + " reorder buffer size: "
 							+ reorderBuffer.size());
@@ -186,7 +232,25 @@ public class ApexOOO {
 		}
 	}
 
-	// TODO verify the rename logic. definitely a  bug.
+	public boolean checkDecodeStall(Instruction instruction) {
+		// TODO Auto-generated method stub
+		if (instruction != null) {
+			if (currentSizeIQ == 8 || reorderBuffer.size() == 16) {
+				System.err.println("no IQ or ROB, current IQ size:" + currentSizeIQ + " reorder buffer size: "
+						+ reorderBuffer.size());
+				// stalled = true;
+				return true;
+
+			} else if (instruction.destination != -1 && freelist.size() == 0) {
+				System.err.println("no free register");
+				// stalled = true;
+				return true;
+			}
+		}
+		return false;
+	}
+
+	// TODO verify the rename logic. definitely a bug.
 	// executes only if Decode not stalling. renames and attempts to read
 	// sources. sets flags. renames destination and allocate a PR. update RAT.
 	// allocate IQ & ROB
@@ -239,7 +303,7 @@ public class ApexOOO {
 			instruction.renamedDestination = x;
 
 			sb.append("P" + instruction.renamedDestination);
-			
+
 			// below 'if' will be removed as we will have to commit everything
 
 			// if (registerValid[currentStandin]) {
@@ -284,15 +348,15 @@ public class ApexOOO {
 		// got decoded
 		// put into the empty slot in the IQ
 		for (int i = 0; i < 8; i++) {
-			if (issuequeue[i] == null) {
+			if (issuequeue[i] == null && instruction.instr_id != null) {
 				issuequeue[i] = instruction;
 				break;
 			}
 
 		}
 		++currentSizeIQ;
-		// put into the reorder buffer
-		reorderBuffer.add(instruction);
+		if (instruction.instr_id != null)
+			reorderBuffer.add(instruction);
 
 	}
 
@@ -316,6 +380,9 @@ public class ApexOOO {
 				++instruction.ageInIQ;
 			}
 		}
+		// TODO verification pending
+		if (stallEXAdd)
+			return;
 		// check instructions ready for issue
 		for (int i = 0; i < 8; i++) {
 
@@ -334,15 +401,7 @@ public class ApexOOO {
 				// works.
 				// TODO possible intFUstall boolean condition here to check if
 				// int fu stalled when resource contention takes place
-				if (instruction.isReadyForIssue && instruction.FUtype == 0 && toIntFu == null && instruction.ageInIQ > 1
-						&& multimer + 1 != 4) {
-					toIntFu = issuequeue[i];
-					System.err.println("sending out to int EX stage" + toIntFu);
-					issuequeue[i] = null;
-					currentSizeIQ--;
-					break;
-				}
-				// TODO verify, have put breaks, serializedstart ups.
+				// TODO verify, have put breaks, serialized start ups.
 				if (instruction.isReadyForIssue && instruction.FUtype == 1 && toIntFu == null
 						&& instruction.ageInIQ > 1) {
 					toMulFU = issuequeue[i];
@@ -350,15 +409,24 @@ public class ApexOOO {
 					currentSizeIQ--;
 					break;
 				}
+				if (instruction.isReadyForIssue && instruction.FUtype == 0 && !stallEXAdd && instruction.ageInIQ > 1) {
+					toIntFu = issuequeue[i];
+					System.err.println("sending out to int EX stage" + toIntFu);
+					issuequeue[i] = null;
+					currentSizeIQ--;
+					break;
+				}
+
 			}
 		}
 	}
 
 	public void doEX() {
+		System.err.println("Stall mem is" + stallMEM);
 		// timer for MUL non-pipelined delay(4)
 		if (inExMulFU != null)
 			multimer++;
-		if (multimer == 4 && inExMulFU!=null) {
+		if (multimer == 4 && inExMulFU != null) {
 			mulcompletes = true;
 		}
 
@@ -369,17 +437,15 @@ public class ApexOOO {
 		// TODO confirm if serialized ex to mem is ok
 		if (mulcompletes && !stallMEM && !stallWB) {
 			System.err.println("MUL COMPLETED and sending to MEM" + inExMulFU);
-			// TODO forward either INT or MUL to MEM ie serialized flow from ex to mem. obvious.
+			// TODO forward either INT or MUL to MEM ie serialized flow from ex
+			// to mem. obvious.
 			toMEM = inExMulFU;
 			inExMulFU = null;
-			mulcompletes=false;
+			mulcompletes = false;
+			stallEXAdd = true;
 			return;
 			// above return stalls int fu whenever mul FU outputs to MEM
 		}
-		// if (inExIntFU != null) {
-		toMEM = inExIntFU;
-		inExIntFU = null;
-		// }
 		if (toMulFU != null && toMulFU.instr_id != null && inExMulFU == null) {
 			inExMulFU = toMulFU;
 			toMulFU = null;
@@ -387,13 +453,30 @@ public class ApexOOO {
 			MulFU(inExMulFU);
 			System.err.println(" Starting mul exec " + inExMulFU);
 		}
+		if (!stallMEM) {
+			toMEM = inExIntFU;
+			inExIntFU = null;
+			stallEXAdd = false;
+
+		} else {
+			System.err.println("stalled, so send back:" + toIntFu);
+			for (int i = 0; i < 8; i++) {
+				if (issuequeue[i] == null) {
+					issuequeue[i] = toIntFu;
+					break;
+				}
+			}
+
+			stallEXAdd = true;
+		}
 
 		// for all instructions other than MUL
-		if (!mulcompletes && toIntFu != null) {
+		if (!mulcompletes && toIntFu != null & !stallEXAdd) {
 			inExIntFU = toIntFu;
 			toIntFu = null;
+			stallEXAdd = false;// test, possible hack
 		}
-		if (inExIntFU != null && inExIntFU.instr_id != null) {
+		if (inExIntFU != null && inExIntFU.instr_id != null && !stallEXAdd) {
 			System.err.println(" EX in int FU " + inExIntFU);// inEX.printRaw();
 			// main execution
 			switch (inExIntFU.instr_id) {
@@ -442,14 +525,14 @@ public class ApexOOO {
 				break;
 			case BAL:
 				branchFlush();
-				stalled = false; // hack. can go wrong!!!
+				// stalled = false; // hack. can go wrong!!!
 				register[8] = inExIntFU.address + 1;
 				GlobalPC = inExIntFU.src1_data + inExIntFU.literal; // absolute
 				// addressing
 				break;
 			case JUMP:
 				branchFlush();
-				stalled = false; // hack. can go wrong!!!
+				// stalled = false; // hack. can go wrong!!!
 				GlobalPC = inExIntFU.src1_data + inExIntFU.literal;// absolute
 				// addressing
 				break;
@@ -469,16 +552,7 @@ public class ApexOOO {
 
 	// for squashing instruction upon branch resolutions
 	public void branchFlush() {
-		for (int i = 0; i < 8; i++) {
-			if (invaliditySetBy[i] == inDecode.address || invaliditySetBy[i] == inExIntFU.address) {
-				invaliditySetBy[i] = -1;
-				registerValid[i] = true;
-			}
-		}
-		inDecode = null;
-		inFetch = null;
-		inFetchtoNext = null;
-		inDecodetoNext = null;
+
 	}
 
 	public void AddFU(Instruction instruction) {
@@ -550,25 +624,39 @@ public class ApexOOO {
 
 	// MEM stage & its helper functions
 	public void doMEM() {
-		inMEMtoNext = inMEM;
-		inMEM = toMEM;
+		if (lstimer == 3) {
+			lstimer = 0;
+			inMEMtoNext = inMEMLS;
+			System.out.println("tramsfer to WB in next cycle load/store:" + inMEMLS);
+			inMEMLS = null;
+			inMEM = null;
+			stallMEM = false;
+			return;
+		}
+		if (inMEMLS != null) {
+			lstimer++;
+			inMEMtoNext = null;
+			return;
+		} else {
+			inMEMtoNext = inMEM;
+			inMEM = toMEM;
+		}
 		// TODO add forwarding logic here
 		System.err.print("===>>> MEM " + inMEM + "\n");// inMEM.printRaw();
 		if (inMEM != null && inMEM.instr_id != null) {
-			System.err.println("Debugging NPE" + inMEM);
+			// System.err.println("Debugging NPE" + inMEM);
 			switch (inMEM.instr_id) {
-			// do nothing
-			case MOVC:
-				inMEM.destination_data = inMEM.literal;
-				break;
-			case MOV:
-				inMEM.destination_data = register[inMEM.src1];
-				break;
 			case LOAD:
 			case STORE:
+				System.out.println("Starting load/store:" + inMEM);
 				LoadStoreFU(inMEM);
+				inMEMLS = inMEM;
+				stallMEM = true;
+				lstimer = 1;
 				break;
 			default:
+				System.out.println("bypassing load/store:" + inMEM);
+
 			}
 		}
 
@@ -612,8 +700,8 @@ public class ApexOOO {
 			switch (inWB.instr_id) {
 			case HALT:
 				// TODO Halt will go through write back. execution stops when
-				// HALT in commited.
-
+				// HALT in committed.
+				// hence below code will be shifted to ROB commitment
 				// this.displayAll();
 				// System.out.println("HALT INSTRUCTION ENCOUNTERED(in WB)");
 				// System.exit(0);
@@ -665,8 +753,15 @@ public class ApexOOO {
 
 		if (reorderBuffer.size() > 0 && reorderBuffer.peek().isReadyForCommit) {
 			Instruction retiring = reorderBuffer.remove();
-			//setting renmaed string back to null as the instrution has completed. renaming from scratch if the same instruction is executed again in future
-			retiring.renamedString=null;
+			// setting renmaed string back to null as the instrution has
+			// completed. renaming from scratch if the same instruction is
+			// executed again in future
+			retiring.renamedString = null;
+			if (retiring.instr_id == InstructionType.HALT) {
+				System.out.println("==============HALT instruction encountered. (head of ROB)==============");
+				this.displayAll();
+				System.exit(0);
+			}
 			if (retiring.destination != -1) {
 				register[retiring.destination] = -1;
 				ar_register[retiring.destination] = retiring.destination_data;
@@ -697,21 +792,30 @@ public class ApexOOO {
 	public void displayAll() {
 		System.out.println(
 				"-----------------------------------------------------------------------------------------------------------------------------");
-		System.out.println("\n\n\nProgram Counter:" + GlobalPC);
-		System.out.println("\nPSW-Zero(only 0 is 0):" + PSW_Z);
+		System.out.println("Program Counter:" + GlobalPC);
+		System.out.println("PSW-Zero(only 0 is 0):" + PSW_Z);
 		printRenameTable();
 		printRegisters();
 		printIssueQueue();
 		this.printStages();
 		// this.printFUs();
-		System.out.println("\n\nMemory(0 to 10):");
-		for (int i = 0; i < 10; i++) {
+		printMemory();
+		printreorderbuffer();
+		System.out.println(
+				"\n-----------------------------------------------------------------------------------------------------------------------------");
+	}
+
+	public void printMemory() {
+		System.out.println("\n\nMemory(0 to 99):");
+		for (int i = 0; i < 20; i++) {
+			System.out.print(i + "\t");
+		}
+		System.out.println();
+		for (int i = 0; i < 100; i++) {
 			System.out.print(memory[i] + "\t");
-			if ((i + 1) % 10 == 0)
+			if ((i + 1) % 20 == 0)
 				System.out.println();
 		}
-		printreorderbuffer();
-
 	}
 
 	private void printreorderbuffer() {
@@ -737,32 +841,32 @@ public class ApexOOO {
 		System.out.print("\tR5:" + ar_register[5]);
 		System.out.print("\tR6:" + ar_register[6]);
 		System.out.print("\tR7:" + ar_register[7]);
-		System.out.format("\n%15s\t", "Phy Register");
-		System.out.print("R0:" + register[0]);
-		System.out.print("\tR1:" + register[1]);
-		System.out.print("\tR2:" + register[2]);
-		System.out.print("\tR3:" + register[3]);
-		System.out.print("\tR4:" + register[4]);
-		System.out.print("\tR5:" + register[5]);
-		System.out.print("\tR6:" + register[6]);
-		System.out.print("\tR7:" + register[7]);
-		System.out.print("\tR8:" + register[8]);
-		System.out.print("\tR9:" + register[9]);
-		System.out.print("\tR10:" + register[10]);
-		System.out.print("\tR11:" + register[11]);
-		System.out.print("\tR12:" + register[12]);
-		System.out.print("\tR13:" + register[13]);
-		System.out.print("\tR14:" + register[14]);
-		System.out.print("\tR15:" + register[15]);
-		System.out.format("\n\n%15s\t", "Allocated bit");
+		System.out.format("\n\n%15s\t", "Phy Register|");
+		System.out.print("P0:" + register[0]);
+		System.out.print("\tP1:" + register[1]);
+		System.out.print("\tP2:" + register[2]);
+		System.out.print("\tP3:" + register[3]);
+		System.out.print("\tP4:" + register[4]);
+		System.out.print("\tP5:" + register[5]);
+		System.out.print("\tP6:" + register[6]);
+		System.out.print("\tP7:" + register[7]);
+		System.out.print("\tP8:" + register[8]);
+		System.out.print("\tP9:" + register[9]);
+		System.out.print("\tP10:" + register[10]);
+		System.out.print("\tP11:" + register[11]);
+		System.out.print("\tP12:" + register[12]);
+		System.out.print("\tP13:" + register[13]);
+		System.out.print("\tP14:" + register[14]);
+		System.out.print("\tP15:" + register[15]);
+		System.out.format("\n%15s\t", "Allocated bit|");
 		for (int i = 0; i < 16; i++) {
 			System.out.print(!freelist.contains(i) + "\t");
 		}
-		System.out.format("\n\n%15s\t", "Status bit");
+		System.out.format("\n%15s\t", "Status bit|");
 		for (int i = 0; i < 16; i++) {
 			System.out.print(registerValid[i] + "\t");
 		}
-		System.out.format("\n%15s\t", "Renamed bit");
+		System.out.format("\n%15s\t", "Renamed bit|");
 		for (int i = 0; i < 16; i++) {
 			System.out.print(renamed[i] + "\t");
 		}
@@ -841,7 +945,7 @@ public class ApexOOO {
 	}
 
 	public void PrintMenu() {
-		System.out.println("\nOptions:\n");
+		System.out.println("\nOptions:");
 		System.out.println("1:\tSimulate: Simulate n cycles. \n");
 		System.out.println("2.\tDisplay: Content of all memory and other relevant info.");
 		System.out.print("3.\tShutDown.\nInput:\t");
@@ -896,7 +1000,7 @@ public class ApexOOO {
 	}
 
 	// converting input file into an Instruction[]
-	public void complieInstructions(Instruction instruction) throws Exception {
+	public void compileInstruction(Instruction instruction) throws Exception {
 		String d;
 		String string = instruction.rawString;
 		instruction.FUtype = 0;
@@ -973,12 +1077,12 @@ public class ApexOOO {
 		try {
 			br = new BufferedReader(new FileReader("asm.txt"));
 			while ((line = br.readLine()) != null) {
-				System.out.println(i + " " + line);
+				// System.out.println(i + " " + line);
 				this.instructions[i].rawString = line;
 				this.instructions[i].contains = true;
 				this.instructions[i].address = i + 20000;
-				this.complieInstructions(this.instructions[i]);
-				instructions[i].print();
+				this.compileInstruction(this.instructions[i]);
+				// instructions[i].print();
 				i++;
 			}
 		} catch (FileNotFoundException e) {

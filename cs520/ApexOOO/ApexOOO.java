@@ -71,14 +71,16 @@ public class ApexOOO {
 	// forwarding data
 	// tag is the register(physical) number being forwarded
 	// value is the data being
-	public int forwardedFromIntEXtag;
-	public int forwardedFromIntEXValue;
-	public int forwardedFromMulEXtag;
-	public int forwardedFromMulEXValue;
-	public int forwardedFromMEMEXtag;
-	public int forwardedFromMEMEXValue;
-	public int forwardedFromWBDtag;
-	public int forwardedFromWBValue;
+	public int forwardedFromIntEXtag = -1;
+	public int forwardedFromIntEXValue = -1;
+	public int forwardedFromMulEXtag = -1;
+	public int forwardedFromMulEXValue = -1;
+	public int forwardedFromMEMtag = -1;
+	public int forwardedFromMEMValue = -1;
+	public int forwardedFromWBtag = -1;
+	public int forwardedFromWBValue = -1;
+	// read value
+	public int forwardResult = -1;
 
 	// constructor
 	public ApexOOO() {
@@ -137,6 +139,8 @@ public class ApexOOO {
 			doFetch();
 			doDecode();
 			issueQueueCheckIssueAndForward();
+			// set all forwarded values to null, TODO verify this assumption
+			emptyForwardedPaths();
 			doEX();
 			doMEM();
 			doWB();
@@ -144,6 +148,18 @@ public class ApexOOO {
 			// clock tick
 
 		}
+	}
+
+	private void emptyForwardedPaths() {
+		// TODO Auto-generated method stub
+		forwardedFromIntEXtag = -1;
+		forwardedFromIntEXValue = -1;
+		forwardedFromMulEXtag = -1;
+		forwardedFromMulEXValue = -1;
+		forwardedFromMEMtag = -1;
+		forwardedFromMEMValue = -1;
+		forwardedFromWBtag = -1;
+		forwardedFromWBValue = -1;
 	}
 
 	// fetch stage
@@ -177,7 +193,7 @@ public class ApexOOO {
 				GlobalPC++;
 				flagEND = true;
 			} // once set, never increment PC. means EOF reached and PC will
-				// point to null
+			// point to null
 		}
 	}
 
@@ -214,22 +230,32 @@ public class ApexOOO {
 			inDecodetoNext = inDecode;
 			inDecode = inFetchtoNext;
 			if (inDecode != null) {
-				if (currentSizeIQ == 8 || reorderBuffer.size() == 16) {
-					System.err.println("no IQ or ROB, current IQ size:" + currentSizeIQ + " reorder buffer size: "
-							+ reorderBuffer.size());
-					stalled = true;
-					return;
-
-				} else if (inDecode.destination != -1 && freelist.size() == 0) {
-					System.err.println("no free register");
-					stalled = true;
-					return;
-				}
-				renameAndRead(inDecode);
+				// if (currentSizeIQ == 8 || reorderBuffer.size() == 16) {
+				// System.err.println("no IQ or ROB, current IQ size:" +
+				// currentSizeIQ + " reorder buffer size: "
+				// + reorderBuffer.size());
+				// stalled = true;
+				// return;
+				//
+				// } else if (inDecode.destination != -1 && freelist.size() ==
+				// 0) {
+				// System.err.println("no free register");
+				// stalled = true;
+				// return;
+				// }
+				stalled = checkDecodeStall(inDecode);
+				if (!stalled)
+					renameAndRead(inDecode);
 			}
 		} else {
+			forwardCheckDuringDecodeStall();
 			return;
 		}
+	}
+
+	public void forwardCheckDuringDecodeStall() {
+		// TODO Auto-generated method stub
+
 	}
 
 	public boolean checkDecodeStall(Instruction instruction) {
@@ -268,6 +294,13 @@ public class ApexOOO {
 				if (registerValid[instruction.renamedSrc1] == true) {
 					instruction.src1_data = register[instruction.renamedSrc1];
 					instruction.src1valid = true;
+				}
+				// TODO experimental forward check while renaming. forwarding
+				// also checked when an instruction stalls in decode via
+				// forwardCheckDuringDecodeStall()
+				else if (checkForwardedPaths(instruction.src1)) {
+					instruction.src1_data = forwardResult;
+					instruction.src1valid = true;
 				} else {
 					instruction.src1valid = false;
 				}
@@ -281,6 +314,13 @@ public class ApexOOO {
 			} else {
 				if (registerValid[instruction.renamedSrc2] == true) {
 					instruction.src2_data = register[instruction.renamedSrc2];
+					instruction.src2valid = true;
+				}
+				// TODO experimental forward check while renaming. forwarding
+				// also checked when an instruction stalls in decode via
+				// forwardCheckDuringDecodeStall()
+				else if (checkForwardedPaths(instruction.src2)) {
+					instruction.src2_data = forwardResult;
 					instruction.src2valid = true;
 				} else {
 					instruction.src2valid = false;
@@ -368,19 +408,30 @@ public class ApexOOO {
 		Instruction instruction = null;
 		toIntFu = null;
 		// toMulFU = null;
-		// check forwarded data and read in wherever required.
+		// TODO check forwarded data and read in wherever required.
 		for (int i = 0; i < 8; i++) {
+			instruction = issuequeue[i];
+			if (instruction != null) {
+				if (instruction.src1 != -1 && !instruction.src1valid && checkForwardedPaths(instruction.src1)) {
+					instruction.src1_data = forwardResult;
+					instruction.src1valid = true;
+				}
+				if (instruction.src2 != -1 && !instruction.src2valid && checkForwardedPaths(instruction.src2)) {
+					instruction.src2_data = forwardResult;
+					instruction.src2valid = true;
+				}
 
+			}
 		}
+		instruction = null;
 		for (int i = 0; i < 8; i++) {
-			// set to null, just a pipeline register
-
 			instruction = issuequeue[i];
 			if (instruction != null) {
 				++instruction.ageInIQ;
 			}
 		}
-		// TODO verification pending
+		// TODO verification pending, problem- will not even send a mul
+		// instruction to FU.
 		if (stallEXAdd)
 			return;
 		// check instructions ready for issue
@@ -440,6 +491,20 @@ public class ApexOOO {
 			// TODO forward either INT or MUL to MEM ie serialized flow from ex
 			// to mem. obvious.
 			toMEM = inExMulFU;
+			// TODO test forwarding
+			// adding code to forward whenever an instruction
+			// completes.(forwarded data received in the next cycle
+
+			// forwarding logic starts
+			if (inExMulFU != null && inExMulFU.instr_id != null) {
+				forwardedFromMulEXtag = inExMulFU.renamedDestination;
+				forwardedFromMulEXValue = inExMulFU.destination_data;
+			} else {
+				forwardedFromMulEXtag = -1;
+				forwardedFromMulEXValue = -1;
+			}
+			// forwarding logic ends
+
 			inExMulFU = null;
 			mulcompletes = false;
 			stallEXAdd = true;
@@ -455,6 +520,10 @@ public class ApexOOO {
 		}
 		if (!stallMEM) {
 			toMEM = inExIntFU;
+			// TODO test forwarding
+			// adding code to forward whenever an instruction
+			// completes.(forwarded data received in the next cycle
+
 			inExIntFU = null;
 			stallEXAdd = false;
 
@@ -492,7 +561,7 @@ public class ApexOOO {
 			case ADD:
 				AddFU(inExIntFU);
 				break;
-			// TODO move to mul FU separate
+				// TODO move to mul FU separate
 			case MUL:
 				MulFU(inExMulFU);
 				break;
@@ -539,6 +608,15 @@ public class ApexOOO {
 
 			}
 			// TODO add forwarding logic here
+			// forwarding logic starts
+			if (inExIntFU != null && inExIntFU.instr_id != null && inExIntFU.destination != -1) {
+				forwardedFromIntEXtag = inExIntFU.renamedDestination;
+				forwardedFromIntEXValue = inExIntFU.destination_data;
+			} else {
+				forwardedFromIntEXtag = -1;
+				forwardedFromIntEXValue = -1;
+			}
+			// forwarding logic ends
 		}
 	}
 
@@ -548,6 +626,7 @@ public class ApexOOO {
 		} else if (instruction.instr_id == InstructionType.MOV) {
 			instruction.destination_data = register[instruction.renamedSrc1];
 		}
+		return;
 	}
 
 	// for squashing instruction upon branch resolutions
@@ -627,6 +706,15 @@ public class ApexOOO {
 		if (lstimer == 3) {
 			lstimer = 0;
 			inMEMtoNext = inMEMLS;
+			// forwarding logic starts
+			if (inMEM != null && inMEM.instr_id != null) {
+				forwardedFromMEMtag = inMEM.renamedDestination;
+				forwardedFromMEMValue = inMEM.destination_data;
+			} else {
+				forwardedFromMEMtag = -1;
+				forwardedFromMEMValue = -1;
+			}
+			// forwarding logic ends
 			System.out.println("tramsfer to WB in next cycle load/store:" + inMEMLS);
 			inMEMLS = null;
 			inMEM = null;
@@ -636,9 +724,22 @@ public class ApexOOO {
 		if (inMEMLS != null) {
 			lstimer++;
 			inMEMtoNext = null;
+			// forwarding logic starts
+			forwardedFromMEMtag = -1;
+			forwardedFromMEMValue = -1;
+			// forwarding logic ends
 			return;
 		} else {
 			inMEMtoNext = inMEM;
+			// forwarding logic starts
+			if (inMEM != null && inMEM.instr_id != null) {
+				forwardedFromMEMtag = inMEM.renamedDestination;
+				forwardedFromMEMValue = inMEM.destination_data;
+			} else {
+				forwardedFromMEMtag = -1;
+				forwardedFromMEMValue = -1;
+			}
+			// forwarding logic ends
 			inMEM = toMEM;
 		}
 		// TODO add forwarding logic here
@@ -656,6 +757,15 @@ public class ApexOOO {
 				break;
 			default:
 				System.out.println("bypassing load/store:" + inMEM);
+				// forwarding logic starts
+				if (inMEM != null && inMEM.instr_id != null) {
+					forwardedFromMEMtag = inMEM.renamedDestination;
+					forwardedFromMEMValue = inMEM.destination_data;
+				} else {
+					forwardedFromMEMtag = -1;
+					forwardedFromMEMValue = -1;
+				}
+				// forwarding logic ends
 
 			}
 		}
@@ -689,8 +799,18 @@ public class ApexOOO {
 	// WB stage
 	public void doWB() {
 		inWB = inMEMtoNext;
+		// TODO test forwarding logic here
+		// forwarding logic starts
 		if (inWB != null && inWB.instr_id != null) {
-			// TODO add forwarding logic here
+			forwardedFromWBtag = inWB.renamedDestination;
+			forwardedFromWBValue = inWB.destination_data;
+		} else {
+			forwardedFromWBtag = -1;
+			forwardedFromWBValue = -1;
+		}
+		// forwarding logic ends
+		if (inWB != null && inWB.instr_id != null) {
+
 			inWB.writtenBack = true;
 			// code to writeback
 			System.err.print(" WB " + inWB + "\n");// inWB.printRaw();
@@ -779,6 +899,24 @@ public class ApexOOO {
 		}
 	}
 
+	public boolean checkForwardedPaths(int registerToLookup) {
+		if (registerToLookup == forwardedFromIntEXtag) {
+			forwardResult = forwardedFromIntEXValue;
+			return true;
+		} else if (registerToLookup == forwardedFromMulEXtag) {
+			forwardResult = forwardedFromMulEXValue;
+			return true;
+		} else if (registerToLookup == forwardedFromMEMtag) {
+			forwardResult = forwardedFromMEMValue;
+			return true;
+		} else if (registerToLookup == forwardedFromWBtag) {
+			forwardResult = forwardedFromWBValue;
+			return true;
+		} else {
+			return false;
+		}
+	}
+
 	// freeing up a register on commit of an instruction, during WB only
 	public void freeUpRegister(int r) {
 		register[r] = -1;
@@ -787,13 +925,13 @@ public class ApexOOO {
 		freelist.add(r);
 	}
 
-	// TODO add forwarded tag and data value
 	// display function and helpers
 	public void displayAll() {
 		System.out.println(
 				"-----------------------------------------------------------------------------------------------------------------------------");
 		System.out.println("Program Counter:" + GlobalPC);
 		System.out.println("PSW-Zero(only 0 is 0):" + PSW_Z);
+		printForwardingPaths();
 		printRenameTable();
 		printRegisters();
 		printIssueQueue();
@@ -805,12 +943,24 @@ public class ApexOOO {
 				"\n-----------------------------------------------------------------------------------------------------------------------------");
 	}
 
+	private void printForwardingPaths() {
+		// TODO Auto-generated method stub
+		// might make this to Standard Err, hence String builder;
+		StringBuilder sb = new StringBuilder();
+		sb.append("From\tData\tValue\n");
+		sb.append("IntFU\t" + forwardedFromIntEXtag + "\t" + forwardedFromIntEXValue + "\n");
+		sb.append("MulFU\t" + forwardedFromMulEXtag + "\t" + forwardedFromMulEXValue + "\n");
+		sb.append("MEM\t" + forwardedFromMEMtag + "\t" + forwardedFromMEMValue + "\n");
+		sb.append("WB\t" + forwardedFromWBtag + "\t" + forwardedFromWBValue + "\n");
+		System.out.println(sb.toString());
+	}
+
 	public void printMemory() {
 		System.out.println("\n\nMemory(0 to 99):");
-		for (int i = 0; i < 20; i++) {
-			System.out.print(i + "\t");
-		}
-		System.out.println();
+		// for (int i = 0; i < 20; i++) {
+		// System.out.print(i + "\t");
+		// }
+		// System.out.println();
 		for (int i = 0; i < 100; i++) {
 			System.out.print(memory[i] + "\t");
 			if ((i + 1) % 20 == 0)
@@ -820,10 +970,10 @@ public class ApexOOO {
 
 	private void printreorderbuffer() {
 		// TODO Auto-generated method stub
-		System.out.println("\n\nReorder Buffer:");
+		System.out.println("\nReorder Buffer:");
 		// System.out.println(reorderBuffer);
 		// printing ready for commit bool val
-		System.out.print("\n[");
+		System.out.print("[");
 		for (Instruction i : reorderBuffer) {
 			System.out.print(i + ":" + i.isReadyForCommit + ",");
 		}
@@ -875,7 +1025,7 @@ public class ApexOOO {
 
 	// Various print functions
 	public void printIssueQueue() {
-		System.out.println("\n\nIssue Queue:\n");
+		System.out.println("\nIssue Queue:");
 		for (int i = 0; i < 8; i++) {
 
 			System.out.print(issuequeue[i]);
@@ -926,7 +1076,7 @@ public class ApexOOO {
 		System.out.print(String.format("%10s", "In MEM\t"));
 		System.out.print(inMEM + "\n");
 		System.out.print(String.format("%10s", "In WB\t"));
-		System.out.print(inWB + "\n");
+		System.out.print(inWB);
 	}
 
 	// initializing processor. TODO copy over from constructor
@@ -945,7 +1095,7 @@ public class ApexOOO {
 	}
 
 	public void PrintMenu() {
-		System.out.println("\nOptions:");
+		System.out.println("Options:");
 		System.out.println("1:\tSimulate: Simulate n cycles. \n");
 		System.out.println("2.\tDisplay: Content of all memory and other relevant info.");
 		System.out.print("3.\tShutDown.\nInput:\t");

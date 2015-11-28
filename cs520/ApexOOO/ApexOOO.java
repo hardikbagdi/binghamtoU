@@ -45,16 +45,9 @@ public class ApexOOO {
 			inExMulFU = null, inEXLSFU = null, inEXLSFU1 = null, inEXLSFU2 = null, inWB4Int = null, inWB4Mul = null,
 			inWB4LS = null, toLSFU = null;
 	// passing on. work as pipeline registers.
-	public Instruction inFetchtoNext = null, inDecodetoNext = null, toMEM = null, inMEMtoNext = null;
+	public Instruction inFetchtoNext = null;
 	// various flags to handle message passing
 	public boolean stalled = false;
-	// free up register method in Decode(case 2) TODO verify if free up possible
-	// in this case
-	public boolean freeUpRegisterInDecode = false;
-	public int RegisterToFree = -1;
-	// following not used currently
-	boolean stallFetch = false, stallDecode = false, stallEXAdd = false, stallEXMul = false, stallMEM = false,
-			stallWB = false;
 	// take input for no of cycles to simulate.
 	public int userInputCycles;
 	// used to stop incrementing PC once end of instructions is reached
@@ -63,10 +56,6 @@ public class ApexOOO {
 	// keeps track of Mul FU cycles - non-pipelined
 	public int multimer = 0;
 	// signals that MUL completed in the current cycle(and hence has to be
-	// forwarded to MEM
-	public boolean mulcompletes;
-	// Flag to signal completion of a memory operations
-	public boolean lscompletes = false;
 	// forwarding data
 	// tag is the register(physical) number being forwarded
 	// value is the data being
@@ -187,7 +176,7 @@ public class ApexOOO {
 				GlobalPC++;
 				flagEND = true;
 			} // once set, never increment PC. means EOF reached and PC will
-				// point to null
+			// point to null
 		}
 	}
 
@@ -200,6 +189,7 @@ public class ApexOOO {
 		Instruction newinst = new Instruction();
 		newinst.rawString = new String(instruction.rawString);
 		newinst.FUtype = instruction.FUtype;
+		newinst.address = instruction.address;
 		newinst.inst_name = instruction.inst_name;
 		newinst.instr_id = instruction.instr_id;
 		newinst.src1 = instruction.src1;
@@ -221,7 +211,7 @@ public class ApexOOO {
 
 		stalled = checkDecodeStall(inDecode);
 		if (!stalled) {
-			inDecodetoNext = inDecode;
+			// inDecodetoNext = inDecode;
 			inDecode = inFetchtoNext;
 			if (inDecode != null) {
 				stalled = checkDecodeStall(inDecode);
@@ -229,14 +219,13 @@ public class ApexOOO {
 					renameAndRead(inDecode);
 			}
 		} else {
-			forwardCheckDuringDecodeStall(inDecode); // TODO implement this
-			// method
+			// TODO verify this method
+			forwardCheckDuringDecodeStall(inDecode);
 			return;
 		}
 	}
 
 	public void forwardCheckDuringDecodeStall(Instruction instruction) {
-		// TODO Auto-generated method stub
 		if (instruction.src1 != -1 && checkForwardedPaths(instruction.src1)) {
 			instruction.src1_data = forwardResult;
 			instruction.src1valid = true;
@@ -248,7 +237,6 @@ public class ApexOOO {
 	}
 
 	public boolean checkDecodeStall(Instruction instruction) {
-		// TODO Auto-generated method stub
 		if (instruction != null) {
 			if (currentSizeIQ == 8 || reorderBuffer.size() == 16) {
 				System.err.println("no IQ or ROB, current IQ size:" + currentSizeIQ + " reorder buffer size: "
@@ -269,11 +257,16 @@ public class ApexOOO {
 	// executes only if Decode not stalling. renames and attempts to read
 	// sources. sets flags. renames destination and allocate a PR. update RAT.
 	// allocate IQ & ROB
+
+	// TODO verify, putting rollback info into instruction
 	public void renameAndRead(Instruction instruction) {
 		// Building the renamed instructions
 		StringBuilder sb = new StringBuilder();
 		sb.append(instruction.inst_name + " ");
 		// rename and try to read sources
+		// TODO experimental forward check while renaming. forwarding
+		// also checked when an instruction stalls in decode via
+		// forwardCheckDuringDecodeStall()
 		if (instruction.src1 != -1) {
 			instruction.renamedSrc1 = RAT.get(instruction.src1);
 			if (RATdecision[instruction.src1] == 0) {
@@ -284,9 +277,7 @@ public class ApexOOO {
 					instruction.src1_data = register[instruction.renamedSrc1];
 					instruction.src1valid = true;
 				}
-				// TODO experimental forward check while renaming. forwarding
-				// also checked when an instruction stalls in decode via
-				// forwardCheckDuringDecodeStall()
+
 				else if (checkForwardedPaths(instruction.src1)) {
 					instruction.src1_data = forwardResult;
 					instruction.src1valid = true;
@@ -304,11 +295,7 @@ public class ApexOOO {
 				if (registerValid[instruction.renamedSrc2] == true) {
 					instruction.src2_data = register[instruction.renamedSrc2];
 					instruction.src2valid = true;
-				}
-				// TODO experimental forward check while renaming. forwarding
-				// also checked when an instruction stalls in decode via
-				// forwardCheckDuringDecodeStall()
-				else if (checkForwardedPaths(instruction.src2)) {
+				} else if (checkForwardedPaths(instruction.src2)) {
 					instruction.src2_data = forwardResult;
 					instruction.src2valid = true;
 				} else {
@@ -324,9 +311,11 @@ public class ApexOOO {
 			int x = freelist.remove();
 
 			registerValid[x] = false;
-			// int currentStandin = RAT.get(instruction.destination);
+			int currentStandin = RAT.get(instruction.destination);
 			// if (RATdecision[instruction.destination] == 1)
-
+			// TODO verify, putting info for rollback in case of branch taken
+			instruction.previousStandIn = currentStandin;
+			instruction.previousRATdeciderbit = RATdecision[instruction.destination] == 0 ? 0 : 1;
 			RAT.put(instruction.destination, x);
 			RATdecision[instruction.destination] = 1;
 			instruction.renamedDestination = x;
@@ -389,8 +378,8 @@ public class ApexOOO {
 	// directly. reduces complexity
 
 	public void updateIssueQueue() {
+		System.err.println("updating issue queue ");
 		Instruction instruction = null;
-		// TODO verify if this can be set to null or not
 		toIntFu = null;
 		toLSFU = null;
 		toMulFU = null;
@@ -399,13 +388,16 @@ public class ApexOOO {
 		for (int i = 0; i < 8; i++) {
 			instruction = issuequeue[i];
 			if (instruction != null) {
-				if (instruction.src1 != -1 && !instruction.src1valid && checkForwardedPaths(instruction.src1)) {
+				System.err.println("for instrutin"+instruction);
+				if (instruction.src1 != -1 && !instruction.src1valid && checkForwardedPaths(instruction.renamedSrc1)) {
 					instruction.src1_data = forwardResult;
 					instruction.src1valid = true;
+					System.err.println("Received forward data for"+instruction);
 				}
-				if (instruction.src2 != -1 && !instruction.src2valid && checkForwardedPaths(instruction.src2)) {
+				if (instruction.src2 != -1 && !instruction.src2valid && checkForwardedPaths(instruction.renamedSrc2)) {
 					instruction.src2_data = forwardResult;
 					instruction.src2valid = true;
+					System.err.println("Received forward data for"+instruction);
 				}
 			}
 		}
@@ -421,7 +413,7 @@ public class ApexOOO {
 				instruction.isReadyForIssue = true;
 				// set isIssuable if both the sources are ready.
 				if (instruction.src1 != -1)
-					instruction.isReadyForIssue = instruction.src1valid;
+					instruction.isReadyForIssue &= instruction.src1valid;
 				if (instruction.src2 != -1)
 					instruction.isReadyForIssue &= instruction.src2valid;
 			}
@@ -515,7 +507,6 @@ public class ApexOOO {
 		///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 		// MULFU
 		// new revamped implementation for Mul FU ( NON PIPELINED 4 cycles)
-		// TODO verify the new logic
 		forwardedFromMulEXtag = -1;
 		forwardedFromMulEXValue = -1;
 		if (multimer > 0) {
@@ -525,7 +516,6 @@ public class ApexOOO {
 			multimer = 0;
 			// pass to WB Stage
 			inWB4Mul = inExMulFU;
-			// TODO add forwarding logic here
 			forwardedFromMulEXtag = inExMulFU.renamedDestination;
 			forwardedFromMulEXValue = inExMulFU.destination_data;
 			inExMulFU = null;
@@ -537,9 +527,8 @@ public class ApexOOO {
 				inExMulFU = toMulFU;
 				MulFU(inExMulFU);
 				multimer = 1;
-			}
-			else{
-				inExMulFU=null;
+			} else {
+				inExMulFU = null;
 			}
 		}
 		///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -572,39 +561,44 @@ public class ApexOOO {
 			case HALT:
 				break;
 			case BNZ:
+				// Relative addressing
 				if (PSW_Z != 0) {
-					branchFlush();
-					GlobalPC = inExIntFU.address + inExIntFU.literal; // relative
-					// Addressing
+					System.out.println("BNZ executed");
+					branchFlush(inExIntFU);
+					GlobalPC = inExIntFU.address + inExIntFU.literal;
+					System.out.println("global before:" + inExIntFU.address);
+					System.out.println("global PC:" + GlobalPC);
 				}
 				break;
 			case BZ:
+				// Relative addressing
 				if (PSW_Z == 0) {
-					branchFlush();
+					branchFlush(inExIntFU);
 
 					GlobalPC = inExIntFU.address + inExIntFU.literal;
 
 				}
 				break;
 			case BAL:
-				branchFlush();
+				// absolute addressing
+				branchFlush(inExIntFU);
 				// stalled = false; // hack. can go wrong!!!
-				register[8] = inExIntFU.address + 1;
-				GlobalPC = inExIntFU.src1_data + inExIntFU.literal; // absolute
-				// addressing
+				System.err.println("bal not implemented yet.");
+				System.exit(0);
+				register[16] = inExIntFU.address + 1;
+				GlobalPC = inExIntFU.src1_data + inExIntFU.literal;
 				break;
 			case JUMP:
-				branchFlush();
+				// absolute addressing
+				branchFlush(inExIntFU);
 				// stalled = false; // hack. can go wrong!!!
-				GlobalPC = inExIntFU.src1_data + inExIntFU.literal;// absolute
-				// addressing
+				GlobalPC = inExIntFU.src1_data + inExIntFU.literal;
 				break;
 			default:
 				System.err.println("?????????????????????In default case of INT FU. Never possibe!!!!!!!!!!!!!!! ");
 				break;
 
 			}
-			// TODO verify forwarding logic here
 			// forwarding logic starts
 			if (inExIntFU.destination != -1) {
 				forwardedFromIntEXtag = inExIntFU.renamedDestination;
@@ -617,8 +611,48 @@ public class ApexOOO {
 	}
 
 	// TODO for squashing instruction upon branch resolutions
-	public void branchFlush() {
+	public void branchFlush(Instruction conditionalInstruction) {
+		inFetch = null;
+		inFetchtoNext = null;
+		inDecode = null;
+		boolean notFound = false;
+		// TODO flush issue queue for instructions with address greater than the
+		// branch address and also revert the RAT
+		int reverseCounter = inExIntFU.address + 1;
+		while (!notFound) {
+			notFound = true;
+			for (int i = 0; i < 8; i++) {
+				if (issuequeue[i] != null && issuequeue[i].address == reverseCounter) {
+					notFound = false;
+					System.err.println(
+							"!!!!!found: at address" + reverseCounter + "ins:" + issuequeue[i] + "now rollingback");
+					rollbackInstruction(issuequeue[i]);
+					issuequeue[i] = null;
+					++reverseCounter;
+					break;
+				}
+			}
+		}
+		System.err.println("Issue queue now is-");
+		printIssueQueue();
+		// TODO flush ROB for instructions with address greater than the branch
+		// address
+		Queue<Instruction> newReorderBuffer = new LinkedList<Instruction>();
+		while (!reorderBuffer.isEmpty() && reorderBuffer.peek().address <= conditionalInstruction.address) {
+			newReorderBuffer.add(reorderBuffer.remove());
+		}
+		reorderBuffer = newReorderBuffer;
+		System.err.println("reorderbuffer after flushing");
+		System.err.println(reorderBuffer);
+	}
 
+	public void rollbackInstruction(Instruction instruction) {
+		// TODO Auto-generated method stub
+		if (instruction.destination != -1) {
+			freelist.add(instruction.renamedDestination);
+			RATdecision[instruction.destination] = instruction.previousRATdeciderbit;
+			RAT.put(instruction.destination, instruction.previousStandIn);
+		}
 	}
 
 	public void Mov(Instruction instruction) {
@@ -643,10 +677,7 @@ public class ApexOOO {
 
 	// needs non pipelined 4 cycle latency
 	public void MulFU(Instruction instruction) {
-		if (multimer == 4) {
-			System.err.println("\n ==========>>>MUL COMPLETES");
-			mulcompletes = true;
-		}
+		
 		System.err.println("in Mul fu");
 		int operand2 = 0;
 		operand2 = instruction.src2 != -1 ? instruction.src2_data : instruction.literal;
@@ -764,6 +795,7 @@ public class ApexOOO {
 			switch (inWB4Int.instr_id) {
 			case HALT:
 				// TODO Halt will go through write back. execution stops when
+				// --> confirm this
 				// HALT in committed.
 				// hence below code will be shifted to ROB commitment
 				// this.displayAll();
@@ -808,7 +840,7 @@ public class ApexOOO {
 		// confirm if an instruction has to spend minimum one instruction in ROB
 		// or if it is possible then it can be directly committed to the ARF,
 		// right now it spends minimum 1 cycle in ROB
-
+		// TODO verify the doNotCommit tag
 		if (reorderBuffer.size() > 0 && reorderBuffer.peek().isReadyForCommit) {
 			Instruction retiring = reorderBuffer.remove();
 			// setting renamed string back to null as the instruction has
@@ -870,6 +902,7 @@ public class ApexOOO {
 		printForwardingPaths();
 		printRenameTable();
 		printRegisters();
+		printFreeList();
 		printIssueQueue();
 		this.printStages();
 		printMemory();
@@ -878,8 +911,12 @@ public class ApexOOO {
 				"\n-----------------------------------------------------------------------------------------------------------------------------");
 	}
 
+	private void printFreeList() {
+		System.out.println("\nFreelist:");
+		System.out.println(freelist);
+	}
+
 	private void printForwardingPaths() {
-		// TODO Auto-generated method stub
 		// might make this to Standard Err, hence String builder;
 		StringBuilder sb = new StringBuilder();
 		sb.append("From\tData\tValue\n");
@@ -1119,7 +1156,7 @@ public class ApexOOO {
 					instruction.src1 = 16;
 				} else if (d.charAt(0) != 'R') {
 					instruction.literal = Integer.parseInt(d);
-					// System.out.println("JUMP/BZ/BNZ" + d);
+					System.out.println("JUMP/BZ/BNZ" + d);
 					return;
 				} else {
 					instruction.src1 = Integer.parseInt(d.substring(1));

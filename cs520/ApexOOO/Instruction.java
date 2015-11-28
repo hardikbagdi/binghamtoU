@@ -1,6 +1,6 @@
 enum InstructionType {
 	ADD, SUB, MUL, AND, OR, XOR, MOVC, MOV, LOAD, STORE, BZ, BNZ, JUMP, BAL, HALT // 15
-																					// instruction
+	// instruction
 }
 
 public class Instruction {
@@ -50,10 +50,21 @@ public class Instruction {
 	int noOfOperands;
 	// to check for WB complete in ROB
 	public boolean writtenBack;
+	// previous stand in of the current destination register used for reverting
+	// changes in case of exception and
+	public int previousStandIn = -1;
+	// previous RAT decider of the current destination register used for
+	// reverting changes in case of exception and
+	public int previousRATdeciderbit = -1;
+	// set true to ignore commitment when mispredicting a branch or flushing the
+	// processor
+	// TODO experimental
+	public boolean doNotCommit;
 
 	public Instruction() {
 		contains = false;
 		writtenBack = false;
+		doNotCommit = false;
 		ageInIQ = 0;
 		instr_id = null;
 	}

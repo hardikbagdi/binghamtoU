@@ -171,7 +171,7 @@ public class ApexOOO {
 		if (flagEND)
 			inFetch = null;
 		// inFetchtoNext = inFetch;
-		// TODO verify below test
+		// TODO verify below test - verified once
 		// the test is- create a new object of instruction every time. this
 		// solves the problem of rename and branch thing
 		// inFetch = this.instructions[GlobalPC - 20000];
@@ -229,14 +229,22 @@ public class ApexOOO {
 					renameAndRead(inDecode);
 			}
 		} else {
-			forwardCheckDuringDecodeStall(); // TODO implement this method
+			forwardCheckDuringDecodeStall(inDecode); // TODO implement this
+			// method
 			return;
 		}
 	}
 
-	public void forwardCheckDuringDecodeStall() {
+	public void forwardCheckDuringDecodeStall(Instruction instruction) {
 		// TODO Auto-generated method stub
-
+		if (instruction.src1 != -1 && checkForwardedPaths(instruction.src1)) {
+			instruction.src1_data = forwardResult;
+			instruction.src1valid = true;
+		}
+		if (instruction.src2 != -1 && checkForwardedPaths(instruction.src2)) {
+			instruction.src2_data = forwardResult;
+			instruction.src2valid = true;
+		}
 	}
 
 	public boolean checkDecodeStall(Instruction instruction) {
@@ -420,6 +428,8 @@ public class ApexOOO {
 		}
 	}
 
+	// TODO age 2 makes an instruction stay in IQ for at least one cycle. to be
+	// changed when forwarding logic is updated
 	// probe IQ for a Int Issuable instruction
 	public boolean checkIssueQueueForInt() {
 		toIntFu = null;
@@ -427,7 +437,7 @@ public class ApexOOO {
 		for (int i = 0; i < 8; i++) {
 			instruction = issuequeue[i];
 			if (instruction != null) {
-				if (instruction.isReadyForIssue && instruction.FUtype == 0 && instruction.ageInIQ > 1) {
+				if (instruction.isReadyForIssue && instruction.FUtype == 0 && instruction.ageInIQ > 2) {
 					toIntFu = issuequeue[i];
 					System.err.println("sending out to intFU EX stage" + toIntFu);
 					issuequeue[i] = null;
@@ -446,7 +456,7 @@ public class ApexOOO {
 		for (int i = 0; i < 8; i++) {
 			instruction = issuequeue[i];
 			if (instruction != null) {
-				if (instruction.isReadyForIssue && instruction.FUtype == 1 && instruction.ageInIQ > 1) {
+				if (instruction.isReadyForIssue && instruction.FUtype == 1 && instruction.ageInIQ > 2) {
 					toMulFU = issuequeue[i];
 					System.err.println("sending out to MulFU EX stage" + toMulFU);
 					issuequeue[i] = null;
@@ -465,7 +475,7 @@ public class ApexOOO {
 		for (int i = 0; i < 8; i++) {
 			instruction = issuequeue[i];
 			if (instruction != null) {
-				if (instruction.isReadyForIssue && instruction.FUtype == 2 && instruction.ageInIQ > 1) {
+				if (instruction.isReadyForIssue && instruction.FUtype == 2 && instruction.ageInIQ > 2) {
 					toLSFU = issuequeue[i];
 					System.err.println("sending out to LSFU EX stage" + toLSFU);
 					issuequeue[i] = null;
@@ -491,7 +501,7 @@ public class ApexOOO {
 			System.out.println("Starting load/store:" + inEXLSFU);
 			LoadStoreFU(inEXLSFU);
 		} else {
-			toLSFU = null;
+			inEXLSFU = null;
 		}
 		// forwarding logic starts
 		// TODO put into LSQ
@@ -521,10 +531,16 @@ public class ApexOOO {
 			inExMulFU = null;
 		}
 
-		if (multimer == 0 && checkIssueQueueForMul()) {
-			inExMulFU = toMulFU;
-			MulFU(inExMulFU);
-			multimer = 1;
+		if (multimer == 0) {
+			if (checkIssueQueueForMul()) {
+
+				inExMulFU = toMulFU;
+				MulFU(inExMulFU);
+				multimer = 1;
+			}
+			else{
+				inExMulFU=null;
+			}
 		}
 		///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 		// INT FU
@@ -595,6 +611,8 @@ public class ApexOOO {
 				forwardedFromIntEXValue = inExIntFU.destination_data;
 			}
 			// forwarding logic ends
+		} else {
+			inExIntFU = null;
 		}
 	}
 
@@ -711,9 +729,6 @@ public class ApexOOO {
 		forwardedFromMulWBValue = -1;
 		forwardedFromLSWBtag = -1;
 		forwardedFromLSWBValue = -1;
-		System.err.print(" WB - LS" + inWB4LS + "\n");
-		System.err.print(" WB - MUL" + inWB4Mul + "\n");
-		System.err.print(" WB - INT" + inWB4Int + "\n");
 
 		// TODO possible bug, !IMPORTANT
 		// not used any transfer register between EX and WB stages
@@ -780,6 +795,10 @@ public class ApexOOO {
 				break;
 			}
 		}
+		System.err.print(" WB - LS" + inWB4LS + "\n");
+		System.err.print(" WB - MUL" + inWB4Mul + "\n");
+		System.err.print(" WB - INT" + inWB4Int + "\n");
+
 	}
 
 	// retirement logic for ROB, takes place during WB
@@ -1181,7 +1200,6 @@ public class ApexOOO {
 		// catch (Exception e) {
 		// System.out.println("Log file doesn't exist");
 		// }
-
 		ApexOOO a = new ApexOOO();
 		// System.err.println("QW");
 		Scanner s = new Scanner(System.in);
@@ -1189,11 +1207,8 @@ public class ApexOOO {
 		a.PrintMenuWithInit();
 		int inputIndex = a.userInputInit(s);
 		if (inputIndex == 2)
-			;
-		a.processCycles(a.userInputCycles);
-
+			a.processCycles(a.userInputCycles);
 		while (true) {
-
 			a.PrintMenu();
 			if (a.userInput(s) == 1)
 				a.processCycles(a.userInputCycles);

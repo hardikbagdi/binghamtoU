@@ -17,8 +17,8 @@ public class ApexOOO {
 	public int register[];
 	// status array for the ROB physical register
 	public boolean registerValid[];
-	// renamed array
-	public boolean renamed[];
+	// renamed array -- switched off. no use
+	// public boolean renamed[];
 	// to flush & undo during branching
 	public int invaliditySetBy[];
 	// memory
@@ -42,7 +42,8 @@ public class ApexOOO {
 	int[] RATdecision; // 0 means ARF , 1 means PRF
 	// hold pipeline details in real time
 	public Instruction inFetch = null, inDecode = null, toIntFu = null, toMulFU = null, inExIntFU = null,
-			inExMulFU = null, inMEM = null, inMEMLS = null, inWB = null;
+			inExMulFU = null, inEXLSFU = null, inEXLSFU1 = null, inEXLSFU2 = null, inWB4Int = null, inWB4Mul = null,
+			inWB4LS = null, toLSFU = null;
 	// passing on. work as pipeline registers.
 	public Instruction inFetchtoNext = null, inDecodetoNext = null, toMEM = null, inMEMtoNext = null;
 	// various flags to handle message passing
@@ -64,21 +65,28 @@ public class ApexOOO {
 	// signals that MUL completed in the current cycle(and hence has to be
 	// forwarded to MEM
 	public boolean mulcompletes;
-	// timer for MEM stage
-	public int lstimer = 0;
 	// Flag to signal completion of a memory operations
 	public boolean lscompletes = false;
 	// forwarding data
 	// tag is the register(physical) number being forwarded
 	// value is the data being
+
+	// forward path from EX stage
 	public int forwardedFromIntEXtag = -1;
 	public int forwardedFromIntEXValue = -1;
 	public int forwardedFromMulEXtag = -1;
 	public int forwardedFromMulEXValue = -1;
-	public int forwardedFromMEMtag = -1;
-	public int forwardedFromMEMValue = -1;
-	public int forwardedFromWBtag = -1;
-	public int forwardedFromWBValue = -1;
+	public int forwardedfromLSFUtag = -1;
+	public int forwardedFromLSFUValue = -1;
+
+	// forward path from WB stage
+	public int forwardedFromIntWBtag = -1;
+	public int forwardedFromIntWBValue = -1;
+	public int forwardedFromMulWBtag = -1;
+	public int forwardedFromMulWBValue = -1;
+	public int forwardedFromLSWBtag = -1;
+	public int forwardedFromLSWBValue = -1;
+
 	// read value
 	public int forwardResult = -1;
 
@@ -89,7 +97,7 @@ public class ApexOOO {
 		ar_register = new int[8];
 		register = new int[16];
 		registerValid = new boolean[16];
-		renamed = new boolean[16];
+		// renamed = new boolean[16];
 		invaliditySetBy = new int[16];
 		loadStoreQueue = new Instruction[4];
 		issuequeue = new Instruction[8];
@@ -134,32 +142,18 @@ public class ApexOOO {
 			if (GlobalPC < 20000) {
 				System.out.println("Invalid PC Value:" + GlobalPC);
 				System.exit(-1);
-
 			}
 			doFetch();
 			doDecode();
-			issueQueueCheckIssueAndForward();
-			// set all forwarded values to null, TODO verify this assumption
-			emptyForwardedPaths();
+			updateIssueQueue();
 			doEX();
-			doMEM();
+			// No memory stage now.
+			// doMEM();
 			doWB();
 			retirement();
 			// clock tick
 
 		}
-	}
-
-	private void emptyForwardedPaths() {
-		// TODO Auto-generated method stub
-		forwardedFromIntEXtag = -1;
-		forwardedFromIntEXValue = -1;
-		forwardedFromMulEXtag = -1;
-		forwardedFromMulEXValue = -1;
-		forwardedFromMEMtag = -1;
-		forwardedFromMEMValue = -1;
-		forwardedFromWBtag = -1;
-		forwardedFromWBValue = -1;
 	}
 
 	// fetch stage
@@ -193,7 +187,7 @@ public class ApexOOO {
 				GlobalPC++;
 				flagEND = true;
 			} // once set, never increment PC. means EOF reached and PC will
-			// point to null
+				// point to null
 		}
 	}
 
@@ -230,25 +224,12 @@ public class ApexOOO {
 			inDecodetoNext = inDecode;
 			inDecode = inFetchtoNext;
 			if (inDecode != null) {
-				// if (currentSizeIQ == 8 || reorderBuffer.size() == 16) {
-				// System.err.println("no IQ or ROB, current IQ size:" +
-				// currentSizeIQ + " reorder buffer size: "
-				// + reorderBuffer.size());
-				// stalled = true;
-				// return;
-				//
-				// } else if (inDecode.destination != -1 && freelist.size() ==
-				// 0) {
-				// System.err.println("no free register");
-				// stalled = true;
-				// return;
-				// }
 				stalled = checkDecodeStall(inDecode);
 				if (!stalled)
 					renameAndRead(inDecode);
 			}
 		} else {
-			forwardCheckDuringDecodeStall();
+			forwardCheckDuringDecodeStall(); // TODO implement this method
 			return;
 		}
 	}
@@ -333,27 +314,16 @@ public class ApexOOO {
 		if (instruction.destination != -1) {
 			// TODO verify allocation of various resources
 			int x = freelist.remove();
-			renamed[x] = false;
+
 			registerValid[x] = false;
-			int currentStandin = RAT.get(instruction.destination);
-			if (RATdecision[instruction.destination] == 1)
-				renamed[currentStandin] = true;
+			// int currentStandin = RAT.get(instruction.destination);
+			// if (RATdecision[instruction.destination] == 1)
+
 			RAT.put(instruction.destination, x);
 			RATdecision[instruction.destination] = 1;
 			instruction.renamedDestination = x;
 
 			sb.append("P" + instruction.renamedDestination);
-
-			// below 'if' will be removed as we will have to commit everything
-
-			// if (registerValid[currentStandin]) {
-			// freeUpRegisterInDecode = true; // opportunity to free up a
-			// // register if the the old stand
-			// // in has been renamed (Case 1)
-			// RegisterToFree = currentStandin;
-			// } else {
-			// freeUpRegisterInDecode = false;
-			// }
 		}
 		if (instruction.src1 != -1) {
 			if (RATdecision[instruction.src1] != 0)
@@ -400,15 +370,24 @@ public class ApexOOO {
 
 	}
 
-	// put items in issue queue and check for forwarded data in each cycle and
-	// issue instructions
-	public void issueQueueCheckIssueAndForward() {
-		// TODO handle stalls in EX due to resource contention. when EX stalls,
-		// nothing goes from IQ to EX
+	// 1. check for forwarded data in each cycle
+	// 2. increment age and set issuable condition
+	// 3.issue instructions - not serialized. i.e. multiple instructions can be
+	// -----broken down into 3 seperate methods
+	// issued simultaneously
+
+	// TODO verify, start up is not serialized
+	// POINT 3 is abstracted into a method - this method called from EX
+	// directly. reduces complexity
+
+	public void updateIssueQueue() {
 		Instruction instruction = null;
+		// TODO verify if this can be set to null or not
 		toIntFu = null;
+		toLSFU = null;
+		toMulFU = null;
 		// toMulFU = null;
-		// TODO check forwarded data and read in wherever required.
+		// TODO check forwarded data and read in wherever required. verify this
 		for (int i = 0; i < 8; i++) {
 			instruction = issuequeue[i];
 			if (instruction != null) {
@@ -420,150 +399,148 @@ public class ApexOOO {
 					instruction.src2_data = forwardResult;
 					instruction.src2valid = true;
 				}
-
 			}
 		}
+		// increment age. why?
+		// 1.instruction spends at least 1 cycle in IQ
+		// 2. Later on introduce age based issue
 		instruction = null;
 		for (int i = 0; i < 8; i++) {
 			instruction = issuequeue[i];
 			if (instruction != null) {
 				++instruction.ageInIQ;
-			}
-		}
-		// TODO verification pending, problem- will not even send a mul
-		// instruction to FU.
-		if (stallEXAdd)
-			return;
-		// check instructions ready for issue
-		for (int i = 0; i < 8; i++) {
-
-			instruction = issuequeue[i];
-			if (instruction != null) {
-
+				// verify if the below logic is correct.
 				instruction.isReadyForIssue = true;
 				// set isIssuable if both the sources are ready.
 				if (instruction.src1 != -1)
 					instruction.isReadyForIssue = instruction.src1valid;
 				if (instruction.src2 != -1)
-					instruction.isReadyForIssue &= instruction.src2valid; // TODO
-				// check
-				// if
-				// logic
-				// works.
-				// TODO possible intFUstall boolean condition here to check if
-				// int fu stalled when resource contention takes place
-				// TODO verify, have put breaks, serialized start ups.
-				if (instruction.isReadyForIssue && instruction.FUtype == 1 && toIntFu == null
-						&& instruction.ageInIQ > 1) {
-					toMulFU = issuequeue[i];
-					issuequeue[i] = null;
-					currentSizeIQ--;
-					break;
-				}
-				if (instruction.isReadyForIssue && instruction.FUtype == 0 && !stallEXAdd && instruction.ageInIQ > 1) {
-					toIntFu = issuequeue[i];
-					System.err.println("sending out to int EX stage" + toIntFu);
-					issuequeue[i] = null;
-					currentSizeIQ--;
-					break;
-				}
-
+					instruction.isReadyForIssue &= instruction.src2valid;
 			}
 		}
 	}
 
-	public void doEX() {
-		System.err.println("Stall mem is" + stallMEM);
-		// timer for MUL non-pipelined delay(4)
-		if (inExMulFU != null)
-			multimer++;
-		if (multimer == 4 && inExMulFU != null) {
-			mulcompletes = true;
-		}
-
-		// TODO handle resource conflicts
-		// toMEM = inExIntFU;
-		// TODO experimental mul completes. mul given higher priority. if mul
-		// completes, then it is forwarded to MEM and int FU stalls
-		// TODO confirm if serialized ex to mem is ok
-		if (mulcompletes && !stallMEM && !stallWB) {
-			System.err.println("MUL COMPLETED and sending to MEM" + inExMulFU);
-			// TODO forward either INT or MUL to MEM ie serialized flow from ex
-			// to mem. obvious.
-			toMEM = inExMulFU;
-			// TODO test forwarding
-			// adding code to forward whenever an instruction
-			// completes.(forwarded data received in the next cycle
-
-			// forwarding logic starts
-			if (inExMulFU != null && inExMulFU.instr_id != null) {
-				forwardedFromMulEXtag = inExMulFU.renamedDestination;
-				forwardedFromMulEXValue = inExMulFU.destination_data;
-			} else {
-				forwardedFromMulEXtag = -1;
-				forwardedFromMulEXValue = -1;
-			}
-			// forwarding logic ends
-
-			inExMulFU = null;
-			mulcompletes = false;
-			stallEXAdd = true;
-			return;
-			// above return stalls int fu whenever mul FU outputs to MEM
-		}
-		if (toMulFU != null && toMulFU.instr_id != null && inExMulFU == null) {
-			inExMulFU = toMulFU;
-			toMulFU = null;
-			multimer = 0;
-			MulFU(inExMulFU);
-			System.err.println(" Starting mul exec " + inExMulFU);
-		}
-		if (!stallMEM) {
-			toMEM = inExIntFU;
-			// TODO test forwarding
-			// adding code to forward whenever an instruction
-			// completes.(forwarded data received in the next cycle
-
-			inExIntFU = null;
-			stallEXAdd = false;
-
-		} else {
-			System.err.println("stalled, so send back:" + toIntFu);
-			for (int i = 0; i < 8; i++) {
-				if (issuequeue[i] == null) {
-					issuequeue[i] = toIntFu;
-					break;
+	// probe IQ for a Int Issuable instruction
+	public boolean checkIssueQueueForInt() {
+		toIntFu = null;
+		Instruction instruction;
+		for (int i = 0; i < 8; i++) {
+			instruction = issuequeue[i];
+			if (instruction != null) {
+				if (instruction.isReadyForIssue && instruction.FUtype == 0 && instruction.ageInIQ > 1) {
+					toIntFu = issuequeue[i];
+					System.err.println("sending out to intFU EX stage" + toIntFu);
+					issuequeue[i] = null;
+					currentSizeIQ--;
+					return true;
 				}
 			}
+		}
+		return false;
+	}
 
-			stallEXAdd = true;
+	// probe IQ for a Mul Issuable instruction
+	public boolean checkIssueQueueForMul() {
+		toMulFU = null;
+		Instruction instruction;
+		for (int i = 0; i < 8; i++) {
+			instruction = issuequeue[i];
+			if (instruction != null) {
+				if (instruction.isReadyForIssue && instruction.FUtype == 1 && instruction.ageInIQ > 1) {
+					toMulFU = issuequeue[i];
+					System.err.println("sending out to MulFU EX stage" + toMulFU);
+					issuequeue[i] = null;
+					currentSizeIQ--;
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+
+	// probe IQ for a LOAD STORE Issuable instruction
+	public boolean checkIssueQueueForLoadStore() {
+		toLSFU = null;
+		Instruction instruction;
+		for (int i = 0; i < 8; i++) {
+			instruction = issuequeue[i];
+			if (instruction != null) {
+				if (instruction.isReadyForIssue && instruction.FUtype == 2 && instruction.ageInIQ > 1) {
+					toLSFU = issuequeue[i];
+					System.err.println("sending out to LSFU EX stage" + toLSFU);
+					issuequeue[i] = null;
+					currentSizeIQ--;
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+
+	public void doEX() {
+
+		///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+		// LSFU
+		// new revamped implementation for LSFU TODO verify the new logic
+		// this is pipelined hence can be checked for every cycle
+		inWB4LS = inEXLSFU2;
+		inEXLSFU2 = inEXLSFU1;
+		inEXLSFU1 = inEXLSFU;
+		if (checkIssueQueueForLoadStore()) {
+			inEXLSFU = toLSFU;
+			System.out.println("Starting load/store:" + inEXLSFU);
+			LoadStoreFU(inEXLSFU);
+		} else {
+			toLSFU = null;
+		}
+		// forwarding logic starts
+		// TODO put into LSQ
+		if (inEXLSFU2 != null && inEXLSFU2.instr_id != null) {
+			forwardedfromLSFUtag = inEXLSFU2.renamedDestination;
+			forwardedFromLSFUValue = inEXLSFU2.destination_data;
+		} else {
+			forwardedfromLSFUtag = -1;
+			forwardedFromLSFUValue = -1;
+		}
+		///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+		// MULFU
+		// new revamped implementation for Mul FU ( NON PIPELINED 4 cycles)
+		// TODO verify the new logic
+		forwardedFromMulEXtag = -1;
+		forwardedFromMulEXValue = -1;
+		if (multimer > 0) {
+			++multimer;
+		}
+		if (multimer == 5) {
+			multimer = 0;
+			// pass to WB Stage
+			inWB4Mul = inExMulFU;
+			// TODO add forwarding logic here
+			forwardedFromMulEXtag = inExMulFU.renamedDestination;
+			forwardedFromMulEXValue = inExMulFU.destination_data;
+			inExMulFU = null;
 		}
 
-		// for all instructions other than MUL
-		if (!mulcompletes && toIntFu != null & !stallEXAdd) {
+		if (multimer == 0 && checkIssueQueueForMul()) {
+			inExMulFU = toMulFU;
+			MulFU(inExMulFU);
+			multimer = 1;
+		}
+		///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+		// INT FU
+		forwardedFromIntEXtag = -1;
+		forwardedFromIntEXValue = -1;
+		inWB4Int = inExIntFU;
+		if (checkIssueQueueForInt()) {
 			inExIntFU = toIntFu;
-			toIntFu = null;
-			stallEXAdd = false;// test, possible hack
-		}
-		if (inExIntFU != null && inExIntFU.instr_id != null && !stallEXAdd) {
-			System.err.println(" EX in int FU " + inExIntFU);// inEX.printRaw();
-			// main execution
+			System.err.println(" EX in int FU " + inExIntFU);
 			switch (inExIntFU.instr_id) {
-			// do nothing
 			case MOVC:
 			case MOV:
 				Mov(inExIntFU);
 				break;
-			case LOAD:
-			case STORE:
-			case HALT:
-				break;
 			case ADD:
 				AddFU(inExIntFU);
-				break;
-				// TODO move to mul FU separate
-			case MUL:
-				MulFU(inExMulFU);
 				break;
 			case SUB:
 				SubFU(inExIntFU);
@@ -576,6 +553,7 @@ public class ApexOOO {
 				break;
 			case OR:
 				OrFU(inExIntFU);
+			case HALT:
 				break;
 			case BNZ:
 				if (PSW_Z != 0) {
@@ -605,19 +583,24 @@ public class ApexOOO {
 				GlobalPC = inExIntFU.src1_data + inExIntFU.literal;// absolute
 				// addressing
 				break;
+			default:
+				System.err.println("?????????????????????In default case of INT FU. Never possibe!!!!!!!!!!!!!!! ");
+				break;
 
 			}
-			// TODO add forwarding logic here
+			// TODO verify forwarding logic here
 			// forwarding logic starts
-			if (inExIntFU != null && inExIntFU.instr_id != null && inExIntFU.destination != -1) {
+			if (inExIntFU.destination != -1) {
 				forwardedFromIntEXtag = inExIntFU.renamedDestination;
 				forwardedFromIntEXValue = inExIntFU.destination_data;
-			} else {
-				forwardedFromIntEXtag = -1;
-				forwardedFromIntEXValue = -1;
 			}
 			// forwarding logic ends
 		}
+	}
+
+	// TODO for squashing instruction upon branch resolutions
+	public void branchFlush() {
+
 	}
 
 	public void Mov(Instruction instruction) {
@@ -627,11 +610,6 @@ public class ApexOOO {
 			instruction.destination_data = register[instruction.renamedSrc1];
 		}
 		return;
-	}
-
-	// for squashing instruction upon branch resolutions
-	public void branchFlush() {
-
 	}
 
 	public void AddFU(Instruction instruction) {
@@ -701,77 +679,6 @@ public class ApexOOO {
 			PSW_Z = -1;
 	}
 
-	// MEM stage & its helper functions
-	public void doMEM() {
-		if (lstimer == 3) {
-			lstimer = 0;
-			inMEMtoNext = inMEMLS;
-			// forwarding logic starts
-			if (inMEM != null && inMEM.instr_id != null) {
-				forwardedFromMEMtag = inMEM.renamedDestination;
-				forwardedFromMEMValue = inMEM.destination_data;
-			} else {
-				forwardedFromMEMtag = -1;
-				forwardedFromMEMValue = -1;
-			}
-			// forwarding logic ends
-			System.out.println("tramsfer to WB in next cycle load/store:" + inMEMLS);
-			inMEMLS = null;
-			inMEM = null;
-			stallMEM = false;
-			return;
-		}
-		if (inMEMLS != null) {
-			lstimer++;
-			inMEMtoNext = null;
-			// forwarding logic starts
-			forwardedFromMEMtag = -1;
-			forwardedFromMEMValue = -1;
-			// forwarding logic ends
-			return;
-		} else {
-			inMEMtoNext = inMEM;
-			// forwarding logic starts
-			if (inMEM != null && inMEM.instr_id != null) {
-				forwardedFromMEMtag = inMEM.renamedDestination;
-				forwardedFromMEMValue = inMEM.destination_data;
-			} else {
-				forwardedFromMEMtag = -1;
-				forwardedFromMEMValue = -1;
-			}
-			// forwarding logic ends
-			inMEM = toMEM;
-		}
-		// TODO add forwarding logic here
-		System.err.print("===>>> MEM " + inMEM + "\n");// inMEM.printRaw();
-		if (inMEM != null && inMEM.instr_id != null) {
-			// System.err.println("Debugging NPE" + inMEM);
-			switch (inMEM.instr_id) {
-			case LOAD:
-			case STORE:
-				System.out.println("Starting load/store:" + inMEM);
-				LoadStoreFU(inMEM);
-				inMEMLS = inMEM;
-				stallMEM = true;
-				lstimer = 1;
-				break;
-			default:
-				System.out.println("bypassing load/store:" + inMEM);
-				// forwarding logic starts
-				if (inMEM != null && inMEM.instr_id != null) {
-					forwardedFromMEMtag = inMEM.renamedDestination;
-					forwardedFromMEMValue = inMEM.destination_data;
-				} else {
-					forwardedFromMEMtag = -1;
-					forwardedFromMEMValue = -1;
-				}
-				// forwarding logic ends
-
-			}
-		}
-
-	}
-
 	void LoadStoreFU(Instruction instruction) {
 		if (instruction.instr_id == InstructionType.LOAD) {
 			if (instruction.literal == -1) {
@@ -798,26 +705,48 @@ public class ApexOOO {
 
 	// WB stage
 	public void doWB() {
-		inWB = inMEMtoNext;
-		// TODO test forwarding logic here
-		// forwarding logic starts
-		if (inWB != null && inWB.instr_id != null) {
-			forwardedFromWBtag = inWB.renamedDestination;
-			forwardedFromWBValue = inWB.destination_data;
-		} else {
-			forwardedFromWBtag = -1;
-			forwardedFromWBValue = -1;
+		forwardedFromIntWBtag = -1;
+		forwardedFromIntWBValue = -1;
+		forwardedFromMulWBtag = -1;
+		forwardedFromMulWBValue = -1;
+		forwardedFromLSWBtag = -1;
+		forwardedFromLSWBValue = -1;
+		System.err.print(" WB - LS" + inWB4LS + "\n");
+		System.err.print(" WB - MUL" + inWB4Mul + "\n");
+		System.err.print(" WB - INT" + inWB4Int + "\n");
+
+		// TODO possible bug, !IMPORTANT
+		// not used any transfer register between EX and WB stages
+
+		// LS instructions
+		if (inWB4LS != null && inWB4LS.instr_id != null) {
+			// forward result
+			forwardedFromLSWBValue = inWB4LS.destination_data;
+			// update WB done flag
+			inWB4LS.writtenBack = true;
+			registerValid[inWB4LS.renamedDestination] = true;
+			register[inWB4LS.renamedDestination] = inWB4LS.destination_data;
 		}
-		// forwarding logic ends
-		if (inWB != null && inWB.instr_id != null) {
 
-			inWB.writtenBack = true;
-			// code to writeback
-			System.err.print(" WB " + inWB + "\n");// inWB.printRaw();
-			// move last memory instruction here
-			// perform check if not a store too :remaining
+		// Mul instructions
+		if (inWB4Mul != null && inWB4Mul.instr_id != null) {
+			// forward result
+			forwardedFromMulWBtag = inWB4Mul.renamedDestination;
+			forwardedFromMulWBValue = inWB4Mul.destination_data;
+			// update WB done flag
+			inWB4Mul.writtenBack = true;
+			registerValid[inWB4Mul.renamedDestination] = true;
+			register[inWB4Mul.renamedDestination] = inWB4Mul.destination_data;
+		}
+		// Int instructions
+		if (inWB4Int != null && inWB4Int.instr_id != null) {
+			// set forwarding values
+			forwardedFromIntWBtag = inWB4Int.renamedDestination;
+			forwardedFromIntWBValue = inWB4Int.destination_data;
+			// set write back flag to true
+			inWB4Int.writtenBack = true;
 
-			switch (inWB.instr_id) {
+			switch (inWB4Int.instr_id) {
 			case HALT:
 				// TODO Halt will go through write back. execution stops when
 				// HALT in committed.
@@ -835,31 +764,21 @@ public class ApexOOO {
 			case AND:
 			case XOR:
 			case OR:
-				register[inWB.renamedDestination] = inWB.destination_data;
+				register[inWB4Int.renamedDestination] = inWB4Int.destination_data;
 
-				registerValid[inWB.renamedDestination] = true;
+				registerValid[inWB4Int.renamedDestination] = true;
 				break;
-
-			case STORE:
 			case BNZ:
 			case BZ:
 			case BAL:
 			case JUMP:
 				break;
+			case STORE:
+				break;
+			default:
+				System.err.println("?????????????????????In default case of INT WB. Never possibe!!!!!!!!!!!!!!! ");
+				break;
 			}
-
-			if (inWB.src1 != -1) {
-
-				registerValid[inWB.src1] = true;
-			}
-			if (inWB.src2 != -1) {
-
-				registerValid[inWB.src2] = true;
-			}
-			if (inWB.destination != -1) {
-				registerValid[inWB.destination] = true;
-			}
-
 		}
 	}
 
@@ -873,7 +792,7 @@ public class ApexOOO {
 
 		if (reorderBuffer.size() > 0 && reorderBuffer.peek().isReadyForCommit) {
 			Instruction retiring = reorderBuffer.remove();
-			// setting renmaed string back to null as the instrution has
+			// setting renamed string back to null as the instruction has
 			// completed. renaming from scratch if the same instruction is
 			// executed again in future
 			retiring.renamedString = null;
@@ -892,7 +811,7 @@ public class ApexOOO {
 			}
 		}
 		for (Instruction i : reorderBuffer) {
-			// hack, could have directly set the isReadyforCommit but then
+			// TODO hack, could have directly set the isReadyforCommit but then
 			// instruction would've directly committed to and not spent min 1
 			// cycle in ROB
 			i.isReadyForCommit = i.writtenBack;
@@ -906,23 +825,21 @@ public class ApexOOO {
 		} else if (registerToLookup == forwardedFromMulEXtag) {
 			forwardResult = forwardedFromMulEXValue;
 			return true;
-		} else if (registerToLookup == forwardedFromMEMtag) {
-			forwardResult = forwardedFromMEMValue;
+		} else if (registerToLookup == forwardedfromLSFUtag) {
+			forwardResult = forwardedFromLSFUValue;
 			return true;
-		} else if (registerToLookup == forwardedFromWBtag) {
-			forwardResult = forwardedFromWBValue;
+		} else if (registerToLookup == forwardedFromIntWBtag) {
+			forwardResult = forwardedFromIntWBValue;
+			return true;
+		} else if (registerToLookup == forwardedFromMulWBtag) {
+			forwardResult = forwardedFromMulWBValue;
+			return true;
+		} else if (registerToLookup == forwardedFromLSWBtag) {
+			forwardResult = forwardedFromLSWBValue;
 			return true;
 		} else {
 			return false;
 		}
-	}
-
-	// freeing up a register on commit of an instruction, during WB only
-	public void freeUpRegister(int r) {
-		register[r] = -1;
-		registerValid[r] = false;
-		renamed[r] = false;
-		freelist.add(r);
 	}
 
 	// display function and helpers
@@ -936,7 +853,6 @@ public class ApexOOO {
 		printRegisters();
 		printIssueQueue();
 		this.printStages();
-		// this.printFUs();
 		printMemory();
 		printreorderbuffer();
 		System.out.println(
@@ -948,10 +864,12 @@ public class ApexOOO {
 		// might make this to Standard Err, hence String builder;
 		StringBuilder sb = new StringBuilder();
 		sb.append("From\tData\tValue\n");
-		sb.append("IntFU\t" + forwardedFromIntEXtag + "\t" + forwardedFromIntEXValue + "\n");
-		sb.append("MulFU\t" + forwardedFromMulEXtag + "\t" + forwardedFromMulEXValue + "\n");
-		sb.append("MEM\t" + forwardedFromMEMtag + "\t" + forwardedFromMEMValue + "\n");
-		sb.append("WB\t" + forwardedFromWBtag + "\t" + forwardedFromWBValue + "\n");
+		sb.append("IntFU\tP" + forwardedFromIntEXtag + "\t" + forwardedFromIntEXValue + "\n");
+		sb.append("MulFU\tP" + forwardedFromMulEXtag + "\t" + forwardedFromMulEXValue + "\n");
+		sb.append("LS FU\tP" + forwardedfromLSFUtag + "\t" + forwardedFromLSFUValue + "\n");
+		sb.append("WB Int\tP" + forwardedFromIntWBtag + "\t" + forwardedFromIntWBValue + "\n");
+		sb.append("WB Mul\tP" + forwardedFromMulWBtag + "\t" + forwardedFromMulWBValue + "\n");
+		sb.append("WB LS\tP" + forwardedFromLSWBtag + "\t" + forwardedFromLSWBValue + "\n");
 		System.out.println(sb.toString());
 	}
 
@@ -968,8 +886,7 @@ public class ApexOOO {
 		}
 	}
 
-	private void printreorderbuffer() {
-		// TODO Auto-generated method stub
+	public void printreorderbuffer() {
 		System.out.println("\nReorder Buffer:");
 		// System.out.println(reorderBuffer);
 		// printing ready for commit bool val
@@ -1016,10 +933,10 @@ public class ApexOOO {
 		for (int i = 0; i < 16; i++) {
 			System.out.print(registerValid[i] + "\t");
 		}
-		System.out.format("\n%15s\t", "Renamed bit|");
-		for (int i = 0; i < 16; i++) {
-			System.out.print(renamed[i] + "\t");
-		}
+		// System.out.format("\n%15s\t", "Renamed bit|");
+		// for (int i = 0; i < 16; i++) {
+		// System.out.print(renamed[i] + "\t");
+		// }
 
 	}
 
@@ -1045,10 +962,17 @@ public class ApexOOO {
 		if (inExMulFU != null)
 			System.out.print("\tCycle: " + multimer);
 		System.out.println();
+		System.out.print(String.format("%10s", "In LS FU\n"));
+		System.out.print(String.format("%10s", "In LS FU\t"));
+		System.out.print(inEXLSFU + "(Stage1)\n");
+		System.out.print(String.format("%10s", "In LS FU\t"));
+		System.out.print(inEXLSFU1 + "(Stage2)\n");
+		System.out.print(String.format("%10s", "In LS FU\t"));
+		System.out.print(inEXLSFU2 + "(Stage3)");
+		System.out.println();
 	}
 
 	public void printRenameTable() {
-		System.out.println();
 		System.out.println("Registe Alias Table:");
 		char decide1, decide2;
 		decide1 = RATdecision[0] == 0 ? 'R' : 'P';
@@ -1073,10 +997,8 @@ public class ApexOOO {
 		System.out.print(inDecode + "\n");
 		System.out.print(String.format("%10s", "In EX\n"));
 		this.printFUs();
-		System.out.print(String.format("%10s", "In MEM\t"));
-		System.out.print(inMEM + "\n");
 		System.out.print(String.format("%10s", "In WB\t"));
-		System.out.print(inWB);
+		System.out.print(inWB4Int + "\t" + inWB4Mul + "\t" + inWB4LS);
 	}
 
 	// initializing processor. TODO copy over from constructor
@@ -1169,6 +1091,8 @@ public class ApexOOO {
 
 		if (instruction.instr_id == InstructionType.MUL)
 			instruction.FUtype = 1;
+		if (instruction.instr_id == InstructionType.LOAD || instruction.instr_id == InstructionType.STORE)
+			instruction.FUtype = 2;
 		if (tokenizer.hasMoreTokens()) {
 			if (instruction.instr_id == InstructionType.JUMP) {
 				d = tokenizer.nextToken();
@@ -1227,12 +1151,12 @@ public class ApexOOO {
 		try {
 			br = new BufferedReader(new FileReader("asm.txt"));
 			while ((line = br.readLine()) != null) {
-				// System.out.println(i + " " + line);
+				System.out.println(i + " " + line);
 				this.instructions[i].rawString = line;
 				this.instructions[i].contains = true;
 				this.instructions[i].address = i + 20000;
 				this.compileInstruction(this.instructions[i]);
-				// instructions[i].print();
+				instructions[i].print();
 				i++;
 			}
 		} catch (FileNotFoundException e) {

@@ -3,6 +3,8 @@ enum InstructionType {
 	// instruction
 }
 
+// JUMP and BAL will give absolute addressing while BZ/BNZ will be relative
+// addressing
 public class Instruction {
 	// falg to detect if contains any data or not
 	public boolean contains;
@@ -58,13 +60,18 @@ public class Instruction {
 	public int previousRATdeciderbit = -1;
 	// set true to ignore commitment when mispredicting a branch or flushing the
 	// processor
-	// TODO experimental
-	public boolean doNotCommit;
-
+	// is an instruction Load or Store
+	public boolean isLoadStore;
+	//
+	public boolean isLSissued;
+	//branch prediction. to save the prediction which is later compared to detect a misprediction.
+	// true means prediction was branch was taken while false means prediction was not taken
+	public boolean prediction;
+	//branch tag 
+	public int branchTag=-1;
 	public Instruction() {
 		contains = false;
 		writtenBack = false;
-		doNotCommit = false;
 		ageInIQ = 0;
 		instr_id = null;
 	}

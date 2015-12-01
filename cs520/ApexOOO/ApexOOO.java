@@ -303,21 +303,27 @@ public class ApexOOO {
 		// TODO experimental forward check while renaming. forwarding
 		// also checked when an instruction stalls in decode via
 		// forwardCheckDuringDecodeStall()
+		System.err.println("in renameAndRead" + instruction);
 		if (instruction.src1 != -1) {
+			System.err.println("has AR src1  " + instruction.src1);
 			instruction.renamedSrc1 = RAT.get(instruction.src1);
+			System.err.println("renamed src1  is " + instruction.renamedSrc1);
 			if (RATdecision[instruction.src1] == 0) {
 				instruction.src1_data = ar_register[instruction.renamedSrc1];
 				instruction.src1valid = true;
 			} else {
 				if (registerValid[instruction.renamedSrc1] == true) {
+					System.err.println(" src1 PR  valid");
 					instruction.src1_data = register[instruction.renamedSrc1];
 					instruction.src1valid = true;
 				}
 
-				else if (checkForwardedPaths(instruction.src1)) {
+				else if (checkForwardedPaths(instruction.renamedSrc1)) {
+					System.err.println(" src1 PR from forwardeda");
 					instruction.src1_data = forwardResult;
 					instruction.src1valid = true;
 				} else {
+					System.err.println(" src1 PR Not valid");
 					instruction.src1valid = false;
 				}
 			}
@@ -331,7 +337,7 @@ public class ApexOOO {
 				if (registerValid[instruction.renamedSrc2] == true) {
 					instruction.src2_data = register[instruction.renamedSrc2];
 					instruction.src2valid = true;
-				} else if (checkForwardedPaths(instruction.src2)) {
+				} else if (checkForwardedPaths(instruction.renamedSrc2)) {
 					instruction.src2_data = forwardResult;
 					instruction.src2valid = true;
 				} else {
@@ -391,10 +397,11 @@ public class ApexOOO {
 		 * as unconditional branch will make decode and fetch stall till target
 		 * address is generated. BZ and BNZ have relative addressing
 		 */
-		if (instruction.instr_id == InstructionType.BZ || instruction.instr_id == InstructionType.BNZ)
-			topBIS = insertintoBIS(instruction);
+		if (instruction.instr_id == InstructionType.BZ || instruction.instr_id == InstructionType.BNZ) {
+			insertintoBIS(instruction);
+			++topBIS;
+		}
 		instruction.branchTag = topBIS;
-
 		// assumption: instruction once decoded is put into the
 		// issue queue entry and ROB entry by the end of the cycle in which it
 		// got decoded
@@ -422,11 +429,11 @@ public class ApexOOO {
 	// POINT 3 is abstracted into a method - this method called from EX
 	// directly. reduces complexity
 
-	private int insertintoBIS(Instruction instruction) {
+	// TODO verify method stub
+	private void insertintoBIS(Instruction instruction) {
 		BIS.push(instruction);
-		System.err.println("branch instruction inserted into BIS, topBIS is now:" + (BIS.size() - 1));
-		return BIS.size() - 1;
-		// TODO Auto-generated method stub
+		System.err.println("branch instruction inserted into BIS");
+		return;
 
 	}
 
@@ -511,6 +518,8 @@ public class ApexOOO {
 		}
 		return false;
 	}
+	
+	// LSQ code /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 	// TODO redo because of LSQ
 	// probe IQ for a LOAD STORE Issuable instruction
@@ -531,39 +540,8 @@ public class ApexOOO {
 		}
 		return false;
 	}
-
-	// TODO experimental LSQ logic
-	public void updateLoadStoreQueue() {
-		Instruction instruction;
-		// forward from stores to loads
-		// TODO check if any forwarding is possible or not
-		// if possible, forward to the load and mark it for commit
-
-		// move an instruction from IQ to LSQ
-		for (int i = 0; i < 8; i++) {
-			instruction = issuequeue[i];
-			if (instruction != null && instruction.instr_id != null) {
-				if (instruction.isReadyForIssue && instruction.isLoadStore && instruction.ageInIQ > 2
-						&& LSQhasSpace()) {
-					System.err.println("transferring LS from IQ TO LSQ " + toLSFU);
-					loadStoreQueue.add(instruction);
-					issuequeue[i] = null;
-					currentSizeIQ--;
-				}
-			}
-		}
-	}
-
-	private boolean LSQhasSpace() {
-		// TODO Auto-generated method stub
-		if (loadStoreQueue.size() < 4)
-			return true;
-		if (loadStoreQueue.peek().isLSissued || loadStoreQueue.peek().isReadyForCommit) {
-			loadStoreQueue.poll();
-			return true;
-		}
-		return false;
-	}
+	
+	// LSQ code /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 	public void doEX() {
 
@@ -606,6 +584,10 @@ public class ApexOOO {
 			forwardedFromMulEXtag = inExMulFU.renamedDestination;
 			forwardedFromMulEXValue = inExMulFU.destination_data;
 			inExMulFU = null;
+		} else {
+			inWB4Mul = null;
+			forwardedFromMulEXtag = -1;
+			forwardedFromMulEXValue = -1;
 		}
 
 		if (multimer == 0) {
@@ -718,10 +700,11 @@ public class ApexOOO {
 		inFetchtoNext = null;
 		inDecode = null;
 		Instruction instruction;
-		// TODO (redo) flush issue queue for instructions with address equal and
+		// TODO (verify) flush issue queue for instructions with address equal
+		// and
 		// greater
 		// than the
-		// branch address and also revert the RAT
+		// branch address
 		while (conditionalInstruction.branchTag <= topBIS) {
 			for (int i = 0; i < 8; i++) {
 				if (issuequeue[i] != null && issuequeue[i].branchTag == topBIS) {
@@ -739,16 +722,30 @@ public class ApexOOO {
 		// TODO(verify) flush ROB for instructions with address greater than the
 		// branch
 		// address
-		reInItRATandAllocatedList();// copy committed ARF to RAT. now we will update. walk
-						// backwards(from head to tail)
+
+		// TODO remove instructions from LSU,IntFU and MUL if they have
+		// instructions which have branchTags >= the mispredicted branch.
+
+		// TODO verify this logic, might introduce a bug
+		// cannot do the following , because the Branch instruction itself is in
+		// intFU
+		// if (inExIntFU.branchTag >= conditionalInstruction.branchTag)
+		// inExIntFU = null;
+
+		// TODO verify, pop BIS till you find the mis predicted branch
+		while (!BIS.isEmpty() && BIS.peek().branchTag > conditionalInstruction.branchTag) {
+			System.err.println(BIS.pop());
+		}
+		reInItRATandAllocatedList();// copy committed ARF to RAT. now we will
+		// update. walk
+		// backwards(from head to tail)
 		// alternative3 in the notes.
 
 		Queue<Instruction> newReorderBuffer = new LinkedList<Instruction>();
 		// last condition to stop
 		// TODO (verify) walking back (towards) from head of the queue till the
 		// branch mispredicted
-		while (!reorderBuffer.isEmpty() && reorderBuffer.peek().branchTag <= conditionalInstruction.address
-				&& reorderBuffer.peek().address != conditionalInstruction.address) {
+		while (!reorderBuffer.isEmpty() && reorderBuffer.peek().branchTag < conditionalInstruction.branchTag) {
 			instruction = reorderBuffer.remove();
 			if (instruction.destination != -1) {
 				RAT.put(instruction.destination, instruction.renamedDestination);
@@ -756,6 +753,7 @@ public class ApexOOO {
 			newReorderBuffer.add(instruction);
 
 		}
+		newReorderBuffer.add(conditionalInstruction);
 		reorderBuffer = newReorderBuffer;
 		System.err.println("reorderbuffer after flushing");
 		System.err.println(reorderBuffer);
@@ -769,10 +767,13 @@ public class ApexOOO {
 			newRAT.put(i, i);
 		}
 		freelist.clear();
-		for(int i=0;i<16;i++){
+		for (int i = 0; i < 16; i++) {
 			freelist.add(i);
 		}
 		RAT = newRAT;
+		for (int i = 0; i < 8; i++) {
+			RATdecision[i] = 0;
+		}
 		printRenameTable();
 	}
 

@@ -74,14 +74,17 @@ public class ApexOOO {
 	private int forwardedFromMulEXValue = -1;
 	private int forwardedfromLSFUtag = -1;
 	private int forwardedFromLSFUValue = -1;
+	private int forwardedFromLSQtag = -1;
+	private int forwardedFromLSQValue = -1;
 
+	// remove these TODO
 	// forward path from WB stage
-	private int forwardedFromIntWBtag = -1;
-	private int forwardedFromIntWBValue = -1;
-	private int forwardedFromMulWBtag = -1;
-	private int forwardedFromMulWBValue = -1;
-	private int forwardedFromLSWBtag = -1;
-	private int forwardedFromLSWBValue = -1;
+	// private int forwardedFromIntWBtag = -1;
+	// private int forwardedFromIntWBValue = -1;
+	// private int forwardedFromMulWBtag = -1;
+	// private int forwardedFromMulWBValue = -1;
+	// private int forwardedFromLSWBtag = -1;
+	// private int forwardedFromLSWBValue = -1;
 
 	// read value
 	private int forwardResult = -1;
@@ -381,14 +384,14 @@ public class ApexOOO {
 			if (RATdecision[instruction.src1] != 0)
 				sb.append(" P" + instruction.renamedSrc1);
 			else {
-				sb.append("(" + instruction.src1_data + ")");
+				sb.append(" (" + instruction.src1_data + ")");
 			}
 		}
 		if (instruction.src2 != -1) {
 			if (RATdecision[instruction.src2] != 0)
 				sb.append(" P" + instruction.renamedSrc2);
 			else {
-				sb.append("(" + instruction.src2_data + ")");
+				sb.append(" (" + instruction.src2_data + ")");
 			}
 		}
 		if (instruction.literal != -1) {
@@ -640,6 +643,8 @@ public class ApexOOO {
 		to.isLSissued = true;
 		to.writtenBack = true;
 		register[to.renamedDestination] = to.destination_data;
+		forwardedFromLSQtag = to.renamedDestination;
+		forwardedFromLSQValue = to.destination_data;
 	}
 
 	// TODO reno because of LSQ
@@ -649,15 +654,18 @@ public class ApexOOO {
 	// we're trying to do LOADS as early as possible
 	private boolean checkLoadStoreQueueForIssue() {
 		// various flags
+		forwardedFromLSQtag = -1;
+		forwardedFromLSQValue = -1;
 		boolean yesFrom0to2 = false, yesFrom1to2 = false;
 		toLSFU = null;
 
 		// for the first(0) instruction in the queue
 		if (loadStoreQueue[0] != null && !loadStoreQueue[0].isLSissued && loadStoreQueue[0].isReadyForIssue
 				&& loadStoreQueue[0].ageInIQ > minAgeInIQ) {
-			System.err.println(loadStoreQueue[0] + "\t\tage:" + loadStoreQueue[0].ageInIQ);
-			toLSFU = loadStoreQueue[0];
 			loadStoreQueue[0].isLSissued = true;
+			System.err.println("0th entry being sent out from LSQ" + loadStoreQueue[0] + "\t\tage:"
+					+ loadStoreQueue[0].ageInIQ + "\t issued:" + loadStoreQueue[0].isLSissued);
+			toLSFU = loadStoreQueue[0];
 			return true;
 		}
 
@@ -810,7 +818,8 @@ public class ApexOOO {
 		inEXLSFU1 = inEXLSFU;
 		if (checkLoadStoreQueueForIssue()) {
 			inEXLSFU = toLSFU;
-			System.out.println("Starting load/store:" + inEXLSFU);
+			toLSFU.isLSissued = true;
+			System.out.println("------>Starting load/store:" + inEXLSFU + "\t isLSissued:" + inEXLSFU.isLSissued);
 			LoadStoreFU(inEXLSFU);
 		} else {
 			inEXLSFU = null;
@@ -832,17 +841,21 @@ public class ApexOOO {
 		if (multimer > 0) {
 			++multimer;
 		}
+		// TODO experimental, forwarding a cycle before
+
 		if (multimer == 5) {
 			multimer = 0;
 			// pass to WB Stage
 			inWB4Mul = inExMulFU;
-			forwardedFromMulEXtag = inExMulFU.renamedDestination;
-			forwardedFromMulEXValue = inExMulFU.destination_data;
 			inExMulFU = null;
 		} else {
 			inWB4Mul = null;
 			forwardedFromMulEXtag = -1;
 			forwardedFromMulEXValue = -1;
+		}
+		if (multimer == 4) {
+			forwardedFromMulEXtag = inExMulFU.renamedDestination;
+			forwardedFromMulEXValue = inExMulFU.destination_data;
 		}
 
 		if (multimer == 0) {
@@ -937,6 +950,25 @@ public class ApexOOO {
 			// correct prediction, so continue as is.
 			System.err.println("$$$$$$$$prediction was correct");
 		} else {
+			// TODO verify PC update logic in case of branch mis predictions
+			if (instruction.instr_id == InstructionType.BZ) {
+
+				if (instruction.src1_data == 0) {
+					GlobalPC = instruction.address + instruction.literal;
+				} else {
+					GlobalPC = instruction.address + 1;
+				}
+			}
+
+			if (instruction.instr_id == InstructionType.BNZ) {
+
+				if (instruction.src1_data != 0) {
+					GlobalPC = instruction.address + instruction.literal;
+				} else {
+					GlobalPC = instruction.address + 1;
+				}
+			}
+
 			// incorrect prediction,
 			System.err.println(
 					"**********************************************************************************************************");
@@ -946,6 +978,7 @@ public class ApexOOO {
 					"**********************************************************************************************************");
 			flushProcessorAfterMisprediction(instruction);
 		}
+
 	}
 
 	// TODO no use of this function. can be used with some modifications
@@ -955,6 +988,9 @@ public class ApexOOO {
 		inFetchtoNext = null;
 		inDecode = null;
 		Instruction instruction;
+
+		// TODO code to flush LSQ also
+
 		// TODO (verify) flush issue queue for instructions with address equal
 		// and
 		// greater
@@ -1137,19 +1173,20 @@ public class ApexOOO {
 
 	// WB stage
 	private void doWB() {
-		forwardedFromIntWBtag = -1;
-		forwardedFromIntWBValue = -1;
-		forwardedFromMulWBtag = -1;
-		forwardedFromMulWBValue = -1;
-		forwardedFromLSWBtag = -1;
-		forwardedFromLSWBValue = -1;
+		// TODO verify
+		// forwardedFromIntWBtag = -1;
+		// forwardedFromIntWBValue = -1;
+		// forwardedFromMulWBtag = -1;
+		// forwardedFromMulWBValue = -1;
+		// forwardedFromLSWBtag = -1;
+		// forwardedFromLSWBValue = -1;
 
 		// LS instructions
 		if (inWB4LS != null && inWB4LS.instr_id != null) {
-			// forward result
-			forwardedFromLSWBtag = inWB4LS.renamedDestination;
-			forwardedFromLSWBValue = inWB4LS.destination_data;
-			// update WB done flag
+			// // forward result
+			// forwardedFromLSWBtag = inWB4LS.renamedDestination;
+			// forwardedFromLSWBValue = inWB4LS.destination_data;
+			// // update WB done flag
 			inWB4LS.writtenBack = true;
 			if (inWB4LS.instr_id == InstructionType.LOAD) {
 				registerValid[inWB4LS.renamedDestination] = true;
@@ -1158,20 +1195,20 @@ public class ApexOOO {
 		}
 		// Mul instructions
 		if (inWB4Mul != null && inWB4Mul.instr_id != null) {
-			// forward result
-			forwardedFromMulWBtag = inWB4Mul.renamedDestination;
-			forwardedFromMulWBValue = inWB4Mul.destination_data;
-			// update WB done flag
+			// // forward result
+			// forwardedFromMulWBtag = inWB4Mul.renamedDestination;
+			// forwardedFromMulWBValue = inWB4Mul.destination_data;
+			// // update WB done flag
 			inWB4Mul.writtenBack = true;
 			registerValid[inWB4Mul.renamedDestination] = true;
 			register[inWB4Mul.renamedDestination] = inWB4Mul.destination_data;
 		}
 		// Int instructions
 		if (inWB4Int != null && inWB4Int.instr_id != null) {
-			// set forwarding values
-			forwardedFromIntWBtag = inWB4Int.renamedDestination;
-			forwardedFromIntWBValue = inWB4Int.destination_data;
-			// set write back flag to true
+			// // set forwarding values
+			// forwardedFromIntWBtag = inWB4Int.renamedDestination;
+			// forwardedFromIntWBValue = inWB4Int.destination_data;
+			// // set write back flag to true
 			inWB4Int.writtenBack = true;
 
 			switch (inWB4Int.instr_id) {
@@ -1214,7 +1251,6 @@ public class ApexOOO {
 			// setting renamed string back to null as the instruction has
 			// completed. renaming from scratch if the same instruction is
 			// executed again in future
-			retiring.renamedString = null;
 			if (retiring.instr_id == InstructionType.HALT) {
 				System.out.println("==============HALT instruction encountered. (head of ROB)==============");
 				this.displayAll();
@@ -1267,14 +1303,8 @@ public class ApexOOO {
 		} else if (registerToLookup == forwardedfromLSFUtag) {
 			forwardResult = forwardedFromLSFUValue;
 			return true;
-		} else if (registerToLookup == forwardedFromIntWBtag) {
-			forwardResult = forwardedFromIntWBValue;
-			return true;
-		} else if (registerToLookup == forwardedFromMulWBtag) {
-			forwardResult = forwardedFromMulWBValue;
-			return true;
-		} else if (registerToLookup == forwardedFromLSWBtag) {
-			forwardResult = forwardedFromLSWBValue;
+		} else if (registerToLookup == forwardedFromLSQtag) {
+			forwardResult = forwardedFromLSQValue;
 			return true;
 		} else {
 			return false;
@@ -1304,14 +1334,18 @@ public class ApexOOO {
 	private void printLSQ() {
 		// TODO Auto-generated method stub
 		System.out.println("Load Store Queue:");
-		for (int i = 0; i < 4; i++)
+		boolean addResolved = false;
+		for (int i = 0; i < 4; i++) {
 			if (loadStoreQueue[i] != null) {
-				System.out.println(loadStoreQueue[i] + "\tAddress Resolved:" + loadStoreQueue[i].src2valid
-						+ "\t,IsIssuable:" + loadStoreQueue[i].isReadyForIssue + ", issued:"
-						+ loadStoreQueue[i].isLSissued + "\t isCommited:" + loadStoreQueue[i].isReadyForCommit);
+				addResolved = loadStoreQueue[i].instr_id == InstructionType.LOAD ? loadStoreQueue[i].src1valid
+						: loadStoreQueue[i].src2valid;
+				System.out.println(loadStoreQueue[i] + "\tAddress Resolved:" + addResolved + "\t,IsIssuable:"
+						+ loadStoreQueue[i].isReadyForIssue + ", issued:" + loadStoreQueue[i].isLSissued
+						+ "\t isReadyForCommited:" + loadStoreQueue[i].isReadyForCommit);
 			} else {
 				System.out.println("null");
 			}
+		}
 	}
 
 	private void printBIS() {
@@ -1332,9 +1366,7 @@ public class ApexOOO {
 		sb.append("IntFU\tP" + forwardedFromIntEXtag + "\t" + forwardedFromIntEXValue + "\n");
 		sb.append("MulFU\tP" + forwardedFromMulEXtag + "\t" + forwardedFromMulEXValue + "\n");
 		sb.append("LS FU\tP" + forwardedfromLSFUtag + "\t" + forwardedFromLSFUValue + "\n");
-		sb.append("WB Int\tP" + forwardedFromIntWBtag + "\t" + forwardedFromIntWBValue + "\n");
-		sb.append("WB Mul\tP" + forwardedFromMulWBtag + "\t" + forwardedFromMulWBValue + "\n");
-		sb.append("WB LS\tP" + forwardedFromLSWBtag + "\t" + forwardedFromLSWBValue + "\n");
+		sb.append("LSQ forward\tP" + forwardedFromLSQtag + "\t" + forwardedFromLSQValue + "\n");
 		System.out.println(sb.toString());
 	}
 
@@ -1413,7 +1445,8 @@ public class ApexOOO {
 
 			System.out.print(issuequeue[i]);
 			if (issuequeue[i] != null) {
-				System.out.print("\tIssuable:" + issuequeue[i].isReadyForIssue);
+				System.out.print(
+						"\tIssuable:" + issuequeue[i].isReadyForIssue + "\tAge in Queue:" + issuequeue[i].ageInIQ);
 			}
 			System.out.print("\n");
 		}
@@ -1462,8 +1495,9 @@ public class ApexOOO {
 		System.out.print(inDecode + "\n");
 		System.out.print(String.format("%10s", "In EX\n"));
 		this.printFUs();
-		System.out.print(String.format("%10s", "In WB\t"));
-		System.out.print(inWB4Int + "\t" + inWB4Mul + "\t" + inWB4LS);
+		// TODO verify timing consistencies
+		// System.out.print(String.format("%10s", "In WB\t"));
+		// System.out.print(inWB4Int + "\t" + inWB4Mul + "\t" + inWB4LS);
 	}
 
 	// initializing processor. TODO copy over from constructor

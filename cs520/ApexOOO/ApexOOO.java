@@ -10,25 +10,27 @@ import java.util.Stack;
 import java.util.StringTokenizer;
 
 public class ApexOOO {
+	// minAgeinIQ
+	private static final int minAgeInIQ = 2;
 	// CPU representations
-	public int PSW_Z = -1;
+	private int PSW_Z = -1;
 	// arch registers
-	public int ar_register[];
+	private int ar_register[];
 	// physical registers
-	public int register[];
+	private int register[];
 	// status array for the ROB physical register
-	public boolean registerValid[];
+	private boolean registerValid[];
 	// renamed array -- switched off. no use
-	// public boolean renamed[];
+	// private boolean renamed[];
 	// memory
-	public int memory[];
+	private int memory[];
 	// PC counter - next fetch
-	public int GlobalPC;
+	private int GlobalPC;
 	// hold the instructions of the input file
 	Instruction[] instructions;
 	// load store queue. Size 4
-	Queue<Instruction> loadStoreQueue;
-	public int currentSizeLSQ;
+	Instruction[] loadStoreQueue;
+	private int currentSizeLSQ;
 	// issue queue. Size 8.
 	Instruction[] issuequeue;
 	int currentSizeIQ;
@@ -43,47 +45,46 @@ public class ApexOOO {
 	// BIS
 	Stack<Instruction> BIS;
 	// counter for branch tags
-	public int globalBranchCounter;
 	int topBIS = -1;
-	// hold pipeline details in real time
-	public Instruction inFetch = null, inDecode = null, toIntFu = null, toMulFU = null, inExIntFU = null,
+	// hold pipeline details
+	private Instruction inFetch = null, inDecode = null, toIntFu = null, toMulFU = null, inExIntFU = null,
 			inExMulFU = null, inEXLSFU = null, inEXLSFU1 = null, inEXLSFU2 = null, inWB4Int = null, inWB4Mul = null,
 			inWB4LS = null, toLSFU = null;
 	// passing on. work as pipeline registers.
-	public Instruction inFetchtoNext = null;
+	private Instruction inFetchtoNext = null;
 	// various flags to handle message passing
-	public boolean stalled = false;
+	private boolean stalled = false;
+	// hack for BAL and jump
+	private boolean masterStall;
 	// take input for no of cycles to simulate.
-	public int userInputCycles;
+	private int userInputCycles;
 	// used to stop incrementing PC once end of instructions is reached
 	boolean flagEND = false;
-	// hack for BAL and jump
-	public boolean masterStall;
 	// keeps track of Mul FU cycles - non-pipelined
 	// also signals that MUL completed in the current cycle(and hence has to be
 	// forwarding data
-	public int multimer = 0;
+	private int multimer = 0;
 	// tag is the register(physical) number being forwarded
 	// value is the data being
 
 	// forward path from EX stage
-	public int forwardedFromIntEXtag = -1;
-	public int forwardedFromIntEXValue = -1;
-	public int forwardedFromMulEXtag = -1;
-	public int forwardedFromMulEXValue = -1;
-	public int forwardedfromLSFUtag = -1;
-	public int forwardedFromLSFUValue = -1;
+	private int forwardedFromIntEXtag = -1;
+	private int forwardedFromIntEXValue = -1;
+	private int forwardedFromMulEXtag = -1;
+	private int forwardedFromMulEXValue = -1;
+	private int forwardedfromLSFUtag = -1;
+	private int forwardedFromLSFUValue = -1;
 
 	// forward path from WB stage
-	public int forwardedFromIntWBtag = -1;
-	public int forwardedFromIntWBValue = -1;
-	public int forwardedFromMulWBtag = -1;
-	public int forwardedFromMulWBValue = -1;
-	public int forwardedFromLSWBtag = -1;
-	public int forwardedFromLSWBValue = -1;
+	private int forwardedFromIntWBtag = -1;
+	private int forwardedFromIntWBValue = -1;
+	private int forwardedFromMulWBtag = -1;
+	private int forwardedFromMulWBValue = -1;
+	private int forwardedFromLSWBtag = -1;
+	private int forwardedFromLSWBValue = -1;
 
 	// read value
-	public int forwardResult = -1;
+	private int forwardResult = -1;
 
 	// constructor
 	public ApexOOO() {
@@ -93,7 +94,7 @@ public class ApexOOO {
 		register = new int[16];
 		registerValid = new boolean[16];
 		// renamed = new boolean[16];
-		loadStoreQueue = new LinkedList<Instruction>();
+		loadStoreQueue = new Instruction[4];
 		issuequeue = new Instruction[8];
 		currentSizeIQ = 0;
 		reorderBuffer = new LinkedList<Instruction>();
@@ -126,7 +127,7 @@ public class ApexOOO {
 			registerValid[i] = false;
 
 		stalled = false;
-
+		currentSizeLSQ = 0;
 	}
 
 	public void processCycles(int noOfCycles) {
@@ -155,13 +156,17 @@ public class ApexOOO {
 			// doMEM();
 			doWB();
 			retirement();
+
+			// experimental
+			removeLoadStoreFromIssueQueue();
+			removeLoadOnly();
 			// clock tick
 
 		}
 	}
 
 	// fetch stage
-	public void doFetch() {
+	private void doFetch() {
 		System.out.println("===Stalled from fetch:" + stalled);
 		System.out.println("===flagendfrom fetch:" + flagEND);
 
@@ -201,6 +206,7 @@ public class ApexOOO {
 		System.err.println("create instruction:" + instruction);
 		Instruction newinst = new Instruction();
 		newinst.rawString = new String(instruction.rawString);
+		newinst.isLoadStore = instruction.isLoadStore;
 		newinst.FUtype = instruction.FUtype;
 		newinst.address = instruction.address;
 		newinst.inst_name = instruction.inst_name;
@@ -209,11 +215,12 @@ public class ApexOOO {
 		newinst.src2 = instruction.src2;
 		newinst.destination = instruction.destination;
 		newinst.literal = instruction.literal;
+
 		return newinst;
 	}
 
 	// decode stage followed by helper functions for it
-	public void doDecode() {
+	private void doDecode() {
 
 		// these check SHOULD NOT BE PERFORMED FOR JUMP, BZ and may be a few
 		// others
@@ -262,18 +269,18 @@ public class ApexOOO {
 		}
 	}
 
-	public void forwardCheckDuringDecodeStall(Instruction instruction) {
-		if (instruction.src1 != -1 && checkForwardedPaths(instruction.src1)) {
+	private void forwardCheckDuringDecodeStall(Instruction instruction) {
+		if (instruction.src1 != -1 && checkForwardedPaths(instruction.renamedSrc1)) {
 			instruction.src1_data = forwardResult;
 			instruction.src1valid = true;
 		}
-		if (instruction.src2 != -1 && checkForwardedPaths(instruction.src2)) {
+		if (instruction.src2 != -1 && checkForwardedPaths(instruction.renamedSrc2)) {
 			instruction.src2_data = forwardResult;
 			instruction.src2valid = true;
 		}
 	}
 
-	public boolean checkDecodeStall(Instruction instruction) {
+	private boolean checkDecodeStall(Instruction instruction) {
 		if (instruction != null) {
 			if (currentSizeIQ == 8 || reorderBuffer.size() == 16) {
 				System.err.println("no IQ or ROB, current IQ size:" + currentSizeIQ + " reorder buffer size: "
@@ -286,6 +293,13 @@ public class ApexOOO {
 				// stalled = true;
 				return true;
 			}
+
+			// Special check for Load Store instruction, need a free LSQ entry
+			if (instruction.isLoadStore) {
+				if (currentSizeLSQ == 4) {
+					return tryFreeingUpLSQ();
+				}
+			}
 		}
 		return false;
 	}
@@ -295,7 +309,7 @@ public class ApexOOO {
 	// executes only if Decode not stalling. renames and attempts to read
 	// sources. sets flags. renames destination and allocate a PR. update RAT.
 	// allocate IQ & ROB
-	public void renameReadPutintoIQnROB(Instruction instruction) {
+	private void renameReadPutintoIQnROB(Instruction instruction) {
 		// Building the renamed instructions
 		StringBuilder sb = new StringBuilder();
 		sb.append(instruction.inst_name + " ");
@@ -414,7 +428,15 @@ public class ApexOOO {
 			}
 
 		}
-		++currentSizeIQ;
+
+		/*
+		 * Put Load/Store instructions into LSQ too
+		 */
+		// TOOO verify this method call
+		if (instruction.instr_id == InstructionType.LOAD || instruction.instr_id == InstructionType.STORE) {
+			putIntoLSQ(instruction);
+			++currentSizeIQ;
+		}
 		if (instruction.instr_id != null)
 			reorderBuffer.add(instruction);
 
@@ -437,7 +459,7 @@ public class ApexOOO {
 
 	}
 
-	public void updateIssueQueue() {
+	private void updateIssueQueue() {
 		System.err.println("updating issue queue ");
 		Instruction instruction = null;
 		toIntFu = null;
@@ -477,18 +499,24 @@ public class ApexOOO {
 					instruction.isReadyForIssue &= instruction.src2valid;
 			}
 		}
+		// TODO experimental hack to make instruction spend atleast one cycle in
+		// LSQ
+		for (int i = 0; i < 4; i++) {
+			if (loadStoreQueue[i] != null)
+				++loadStoreQueue[i].ageInIQ;
+		}
 	}
 
 	// TODO age 2 makes an instruction stay in IQ for at least one cycle. to be
 	// changed when forwarding logic is updated
 	// probe IQ for a Int Issuable instruction
-	public boolean checkIssueQueueForInt() {
+	private boolean checkIssueQueueForInt() {
 		toIntFu = null;
 		Instruction instruction;
 		for (int i = 0; i < 8; i++) {
 			instruction = issuequeue[i];
 			if (instruction != null) {
-				if (instruction.isReadyForIssue && instruction.FUtype == 0 && instruction.ageInIQ > 2) {
+				if (instruction.isReadyForIssue && instruction.FUtype == 0 && instruction.ageInIQ > minAgeInIQ) {
 					toIntFu = issuequeue[i];
 					System.err.println("sending out to intFU EX stage" + toIntFu);
 					issuequeue[i] = null;
@@ -501,13 +529,13 @@ public class ApexOOO {
 	}
 
 	// probe IQ for a Mul Issuable instruction
-	public boolean checkIssueQueueForMul() {
+	private boolean checkIssueQueueForMul() {
 		toMulFU = null;
 		Instruction instruction;
 		for (int i = 0; i < 8; i++) {
 			instruction = issuequeue[i];
 			if (instruction != null) {
-				if (instruction.isReadyForIssue && instruction.FUtype == 1 && instruction.ageInIQ > 2) {
+				if (instruction.isReadyForIssue && instruction.FUtype == 1 && instruction.ageInIQ > minAgeInIQ) {
 					toMulFU = issuequeue[i];
 					System.err.println("sending out to MulFU EX stage" + toMulFU);
 					issuequeue[i] = null;
@@ -518,32 +546,259 @@ public class ApexOOO {
 		}
 		return false;
 	}
-	
-	// LSQ code /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-	// TODO redo because of LSQ
-	// probe IQ for a LOAD STORE Issuable instruction
-	public boolean checkIssueQueueForLoadStore() {
-		toLSFU = null;
-		Instruction instruction;
-		for (int i = 0; i < 8; i++) {
-			instruction = issuequeue[i];
-			if (instruction != null) {
-				if (instruction.isReadyForIssue && instruction.FUtype == 2 && instruction.ageInIQ > 2) {
-					toLSFU = issuequeue[i];
-					System.err.println("sending out to LSFU EX stage" + toLSFU);
-					issuequeue[i] = null;
-					currentSizeIQ--;
-					return true;
-				}
+	// LSQ code
+	// /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+	// try freeing up LSQ if LSQ full
+
+	// LSQ - 0 is head 3 is tail
+	private boolean tryFreeingUpLSQ() {
+		// TODO Auto-generated method stub
+		if (currentSizeLSQ > 4 || currentSizeLSQ < 0) {
+			System.err.println("un-possible. inconsistent state LSQ size" + currentSizeLSQ);
+			System.exit(1);
+		}
+		if (loadStoreQueue[0] != null && loadStoreQueue[0].instr_id == InstructionType.LOAD) {
+			if (loadStoreQueue[0].isLSissued) {
+				loadStoreQueue[0] = null;
+				--currentSizeLSQ;
+				shiftLSQ();
+				return true;
+
+			}
+		} else if (loadStoreQueue[0] != null && loadStoreQueue[0].instr_id == InstructionType.STORE) {
+			if (loadStoreQueue[0].isReadyForCommit) {
+				loadStoreQueue[0] = null;
+				--currentSizeLSQ;
+				shiftLSQ();
+				return true;
 			}
 		}
 		return false;
 	}
-	
-	// LSQ code /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-	public void doEX() {
+	// TODO experimental
+	private void removeLoadOnly() {
+		while (loadStoreQueue[0] != null && loadStoreQueue[0].instr_id == InstructionType.LOAD
+				&& loadStoreQueue[0].isLSissued) {
+			shiftLSQ();
+			--currentSizeLSQ;
+		}
+		while (loadStoreQueue[1] != null && loadStoreQueue[1].instr_id == InstructionType.LOAD
+				&& loadStoreQueue[1].isLSissued) {
+			loadStoreQueue[1] = loadStoreQueue[2];
+			loadStoreQueue[2] = loadStoreQueue[3];
+			loadStoreQueue[3] = null;
+			--currentSizeLSQ;
+		}
+		while (loadStoreQueue[2] != null && loadStoreQueue[2].instr_id == InstructionType.LOAD
+				&& loadStoreQueue[0].isLSissued) {
+			loadStoreQueue[2] = loadStoreQueue[3];
+			loadStoreQueue[3] = null;
+			--currentSizeLSQ;
+		}
+		if (loadStoreQueue[3] != null && loadStoreQueue[0].instr_id == InstructionType.LOAD
+				&& loadStoreQueue[0].isLSissued) {
+			loadStoreQueue[3] = null;
+			--currentSizeLSQ;
+		}
+	}
+
+	private void putIntoLSQ(Instruction instruction) {
+		// TODO Auto-generated method stub
+		System.err.println("putting in LSQ" + instruction);
+		for (int i = 0; i < 4; i++) {
+			if (loadStoreQueue[i] == null) {
+				loadStoreQueue[i] = instruction;
+				++currentSizeLSQ;
+				printLSQ();
+				return;
+			}
+		}
+		System.err.println("un-possible, lsq size:" + currentSizeLSQ);
+		System.exit(1);
+	}
+
+	private void removeLoadStoreFromIssueQueue() {
+		System.err.println("hello from remove LS from IQ");
+		Instruction instruction = null;
+		for (int i = 0; i < 8; i++) {
+			System.err.println("t");
+			instruction = issuequeue[i];
+			if (instruction != null && instruction.isLoadStore && instruction.isReadyForIssue) {
+				System.err.println("removing LS from issue queue: " + issuequeue[i]);
+				issuequeue[i] = null;
+				--currentSizeIQ;
+			}
+		}
+	}
+
+	// TODO verify, function which performs forwarding, (detection logic in
+	// checkLoadStoreQueueForLoadStore())
+	private void doforwarding(Instruction from, Instruction to) {
+		to.destination_data = from.src1_data;
+		to.isLSissued = true;
+		to.writtenBack = true;
+		register[to.renamedDestination] = to.destination_data;
+	}
+
+	// TODO reno because of LSQ
+	// probe IQ for a LOAD STORE Issuable instruction
+
+	// delaying store instructions. delay are not executing out of order but
+	// we're trying to do LOADS as early as possible
+	private boolean checkLoadStoreQueueForIssue() {
+		// various flags
+		boolean yesFrom0to2 = false, yesFrom1to2 = false;
+		toLSFU = null;
+
+		// for the first(0) instruction in the queue
+		if (loadStoreQueue[0] != null && !loadStoreQueue[0].isLSissued && loadStoreQueue[0].isReadyForIssue
+				&& loadStoreQueue[0].ageInIQ > minAgeInIQ) {
+			System.err.println(loadStoreQueue[0] + "\t\tage:" + loadStoreQueue[0].ageInIQ);
+			toLSFU = loadStoreQueue[0];
+			loadStoreQueue[0].isLSissued = true;
+			return true;
+		}
+
+		// for second(1) instruction basic check
+		if (loadStoreQueue[0] != null && loadStoreQueue[1] != null && !loadStoreQueue[1].isLSissued
+				&& loadStoreQueue[1].isReadyForIssue && loadStoreQueue[1].ageInIQ > minAgeInIQ) {
+			// if load
+			if (loadStoreQueue[1].instr_id == InstructionType.LOAD) {
+				if (loadStoreQueue[0].instr_id == InstructionType.STORE) {
+					// if the first is a store, then check if the address is
+					// resolved, if not resolved then you can't execute this
+					// instruction, if resolved, check if the same address, if
+					// same then forward, if not same then execute OOO
+
+					// just check the src2 bit of 0 to check address equality
+					if (loadStoreQueue[0].src2valid) {
+						// check if the address is same. if not then execute OOO
+						if ((loadStoreQueue[1].src2_data + loadStoreQueue[1].literal) != (loadStoreQueue[0].src2_data
+								+ loadStoreQueue[0].literal)) {
+							toLSFU = loadStoreQueue[1];
+							loadStoreQueue[1].isLSissued = true;
+							return true;
+						} else {
+							// we need to forward if the previous store has the
+							// src1 valid
+							if (loadStoreQueue[0].src1valid) {
+								// write logic to forward
+								doforwarding(loadStoreQueue[0], loadStoreQueue[1]);
+							} else {
+								// do nothing, we wait till the address is
+								// resolved
+							}
+						}
+					}
+					// previous store instruction not resolved
+					else {
+						// cant do anything
+					}
+				}
+				// if not preceding is not a store then you can execute the
+				// instruction
+				else {
+					toLSFU = loadStoreQueue[1];
+					loadStoreQueue[1].isLSissued = true;
+					return true;
+
+				}
+			}
+		}
+		// for second(2) instruction basic check
+		if (loadStoreQueue[0] != null && loadStoreQueue[1] != null && loadStoreQueue[2] != null
+				&& !loadStoreQueue[2].isLSissued && loadStoreQueue[2].isReadyForIssue
+				&& loadStoreQueue[2].instr_id == InstructionType.LOAD && loadStoreQueue[2].ageInIQ > minAgeInIQ) {
+
+			if (loadStoreQueue[0].instr_id == InstructionType.LOAD
+					&& loadStoreQueue[1].instr_id == InstructionType.LOAD) {
+				// if previous are not store then you can execute
+
+				toLSFU = loadStoreQueue[2];
+				loadStoreQueue[2].isLSissued = true;
+				return true;
+
+			} else if (loadStoreQueue[0].instr_id == InstructionType.STORE) {
+				if (loadStoreQueue[0].src2valid) {
+					if ((loadStoreQueue[0].src2_data + loadStoreQueue[0].literal) != (loadStoreQueue[2].src2_data
+							+ loadStoreQueue[2].literal)) {
+						// can issue the instruction
+						yesFrom0to2 = true;
+					}
+					// address match and hence forward
+					else {
+						// we need to forward if the previous store has the
+						// src1 valid
+						if (loadStoreQueue[0].src1valid) {
+							// write logic to forward
+							doforwarding(loadStoreQueue[0], loadStoreQueue[2]);
+
+						} else {
+							// do nothing, we wait till the data is
+							// resolved
+						}
+					}
+				} else {
+					// can't do anything if a previous store address is not
+					// known
+				}
+
+			} else if (loadStoreQueue[1].instr_id == InstructionType.STORE) {
+				if (loadStoreQueue[1].src2valid) {
+					if ((loadStoreQueue[1].src2_data + loadStoreQueue[1].literal) != (loadStoreQueue[2].src2_data
+							+ loadStoreQueue[2].literal)) {
+						// can issue the instruction
+						yesFrom1to2 = true;
+					}
+					// address match and hence forward
+					else {
+						// we need to forward if the previous store has the
+						// src1 valid
+						if (loadStoreQueue[1].src1valid) {
+							// write logic to forward
+							doforwarding(loadStoreQueue[1], loadStoreQueue[2]);
+
+						} else {
+							// do nothing, we wait till the data is
+							// resolved
+						}
+					}
+				} else {
+					// can't do anything if a previous store address is not
+					// known
+				}
+
+			} else if (loadStoreQueue[0].instr_id == InstructionType.STORE
+					&& loadStoreQueue[1].instr_id == InstructionType.STORE) {
+				if (yesFrom0to2 && yesFrom1to2) {
+					toLSFU = loadStoreQueue[2];
+					loadStoreQueue[2].isLSissued = true;
+					return true;
+				}
+			}
+
+		}
+
+		// if nothing can be found, then the bubble is LSFU
+		toLSFU = null;
+		return false;
+
+	}
+
+	private void shiftLSQ() {
+		// TODO Auto-generated method stub
+		loadStoreQueue[0] = loadStoreQueue[1];
+		loadStoreQueue[1] = loadStoreQueue[2];
+		loadStoreQueue[2] = loadStoreQueue[3];
+		loadStoreQueue[3] = null;
+
+	}
+	// LSQ code
+	// /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+	private void doEX() {
 
 		///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 		// LSFU
@@ -553,7 +808,7 @@ public class ApexOOO {
 		inWB4LS = inEXLSFU2;
 		inEXLSFU2 = inEXLSFU1;
 		inEXLSFU1 = inEXLSFU;
-		if (checkIssueQueueForLoadStore()) {
+		if (checkLoadStoreQueueForIssue()) {
 			inEXLSFU = toLSFU;
 			System.out.println("Starting load/store:" + inEXLSFU);
 			LoadStoreFU(inEXLSFU);
@@ -670,7 +925,7 @@ public class ApexOOO {
 		}
 	}
 
-	public void processConditionalBranches(Instruction instruction) {
+	private void processConditionalBranches(Instruction instruction) {
 		boolean taken = false;
 		if (instruction.instr_id == InstructionType.BZ) {
 			taken = (instruction.src1_data == 0) ? true : false;
@@ -695,7 +950,7 @@ public class ApexOOO {
 
 	// TODO no use of this function. can be used with some modifications
 	// TODO for squashing instruction upon branch resolutions
-	public void flushProcessorAfterMisprediction(Instruction conditionalInstruction) {
+	private void flushProcessorAfterMisprediction(Instruction conditionalInstruction) {
 		inFetch = null;
 		inFetchtoNext = null;
 		inDecode = null;
@@ -749,6 +1004,9 @@ public class ApexOOO {
 			instruction = reorderBuffer.remove();
 			if (instruction.destination != -1) {
 				RAT.put(instruction.destination, instruction.renamedDestination);
+				// TODO bug testing
+				RATdecision[instruction.destination] = 1;
+				freelist.remove(instruction.renamedDestination);
 			}
 			newReorderBuffer.add(instruction);
 
@@ -777,16 +1035,7 @@ public class ApexOOO {
 		printRenameTable();
 	}
 
-	// TODO not used
-	public void rollbackInstruction(Instruction instruction) {
-		if (instruction.destination != -1) {
-			freelist.add(instruction.renamedDestination);
-			RATdecision[instruction.destination] = instruction.previousRATdeciderbit;
-			RAT.put(instruction.destination, instruction.previousStandIn);
-		}
-	}
-
-	public void Mov(Instruction instruction) {
+	private void Mov(Instruction instruction) {
 		if (instruction.instr_id == InstructionType.MOVC) {
 			instruction.destination_data = instruction.literal;
 		} else if (instruction.instr_id == InstructionType.MOV) {
@@ -795,7 +1044,7 @@ public class ApexOOO {
 		return;
 	}
 
-	public void AddFU(Instruction instruction) {
+	private void AddFU(Instruction instruction) {
 		System.err.println("in add fu");
 		int operand2 = 0;
 		operand2 = instruction.src2 != -1 ? instruction.src2_data : instruction.literal;
@@ -807,7 +1056,7 @@ public class ApexOOO {
 	}
 
 	// needs non pipelined 4 cycle latency
-	public void MulFU(Instruction instruction) {
+	private void MulFU(Instruction instruction) {
 
 		System.err.println("in Mul fu");
 		int operand2 = 0;
@@ -815,7 +1064,7 @@ public class ApexOOO {
 		instruction.destination_data = instruction.src1_data * operand2;
 	}
 
-	public void SubFU(Instruction instruction) {
+	private void SubFU(Instruction instruction) {
 		System.err.println("in sub fu");
 		int operand2 = 0;
 		operand2 = instruction.src2 != -1 ? instruction.src2_data : instruction.literal;
@@ -826,7 +1075,7 @@ public class ApexOOO {
 			PSW_Z = -1;
 	}
 
-	public void AndFU(Instruction instruction) {
+	private void AndFU(Instruction instruction) {
 		System.out.println("in OR fu");
 		int operand2 = 0;
 		operand2 = instruction.src2 != -1 ? instruction.src2_data : instruction.literal;
@@ -837,7 +1086,7 @@ public class ApexOOO {
 			PSW_Z = -1;
 	}
 
-	public void OrFU(Instruction instruction) {
+	private void OrFU(Instruction instruction) {
 		System.out.println("in OR fu");
 		int operand2 = 0;
 		operand2 = instruction.src2 != -1 ? instruction.src2_data : instruction.literal;
@@ -848,7 +1097,7 @@ public class ApexOOO {
 			PSW_Z = -1;
 	}
 
-	public void XorFU(Instruction instruction) {
+	private void XorFU(Instruction instruction) {
 		System.out.println("in OR fu");
 		int operand2 = 0;
 		operand2 = instruction.src2 != -1 ? instruction.src2_data : instruction.literal;
@@ -887,7 +1136,7 @@ public class ApexOOO {
 	}
 
 	// WB stage
-	public void doWB() {
+	private void doWB() {
 		forwardedFromIntWBtag = -1;
 		forwardedFromIntWBValue = -1;
 		forwardedFromMulWBtag = -1;
@@ -898,6 +1147,7 @@ public class ApexOOO {
 		// LS instructions
 		if (inWB4LS != null && inWB4LS.instr_id != null) {
 			// forward result
+			forwardedFromLSWBtag = inWB4LS.renamedDestination;
 			forwardedFromLSWBValue = inWB4LS.destination_data;
 			// update WB done flag
 			inWB4LS.writtenBack = true;
@@ -955,7 +1205,7 @@ public class ApexOOO {
 	}
 
 	// retirement logic for ROB, takes place during WB
-	public void retirement() {
+	private void retirement() {
 		// confirm if an instruction has to spend minimum one instruction in ROB
 		// or if it is possible then it can be directly committed to the ARF,
 		// right now it spends minimum 1 cycle in ROB
@@ -1007,7 +1257,7 @@ public class ApexOOO {
 		}
 	}
 
-	public boolean checkForwardedPaths(int registerToLookup) {
+	private boolean checkForwardedPaths(int registerToLookup) {
 		if (registerToLookup == forwardedFromIntEXtag) {
 			forwardResult = forwardedFromIntEXValue;
 			return true;
@@ -1042,12 +1292,26 @@ public class ApexOOO {
 		printRegisters();
 		printFreeList();
 		printIssueQueue();
+		printLSQ();
 		this.printStages();
 		printMemory();
 		printreorderbuffer();
 		printBIS();
 		System.out.println(
-				"\n-----------------------------------------------------------------------------------------------------------------------------");
+				"-----------------------------------------------------------------------------------------------------------------------------");
+	}
+
+	private void printLSQ() {
+		// TODO Auto-generated method stub
+		System.out.println("Load Store Queue:");
+		for (int i = 0; i < 4; i++)
+			if (loadStoreQueue[i] != null) {
+				System.out.println(loadStoreQueue[i] + "\tAddress Resolved:" + loadStoreQueue[i].src2valid
+						+ "\t,IsIssuable:" + loadStoreQueue[i].isReadyForIssue + ", issued:"
+						+ loadStoreQueue[i].isLSissued + "\t isCommited:" + loadStoreQueue[i].isReadyForCommit);
+			} else {
+				System.out.println("null");
+			}
 	}
 
 	private void printBIS() {
@@ -1074,7 +1338,7 @@ public class ApexOOO {
 		System.out.println(sb.toString());
 	}
 
-	public void printMemory() {
+	private void printMemory() {
 		System.out.println("\n\nMemory(0 to 99):");
 		// for (int i = 0; i < 20; i++) {
 		// System.out.print(i + "\t");
@@ -1087,7 +1351,7 @@ public class ApexOOO {
 		}
 	}
 
-	public void printreorderbuffer() {
+	private void printreorderbuffer() {
 		System.out.println("\nReorder Buffer:");
 		// System.out.println(reorderBuffer);
 		// printing ready for commit bool val
@@ -1099,7 +1363,7 @@ public class ApexOOO {
 
 	}
 
-	public void printRegisters() {
+	private void printRegisters() {
 		System.out.println("\nArchtectural Registers:");
 		System.out.print("R0:" + ar_register[0]);
 		System.out.print("\tR1:" + ar_register[1]);
@@ -1143,8 +1407,8 @@ public class ApexOOO {
 	}
 
 	// Various print functions
-	public void printIssueQueue() {
-		System.out.println("\nIssue Queue:");
+	private void printIssueQueue() {
+		System.out.println("Issue Queue:");
 		for (int i = 0; i < 8; i++) {
 
 			System.out.print(issuequeue[i]);
@@ -1156,7 +1420,7 @@ public class ApexOOO {
 
 	}
 
-	public void printFUs() {
+	private void printFUs() {
 		System.out.print(String.format("%10s", "In Int FU\t"));
 		System.out.println(inExIntFU);
 		System.out.print(String.format("%10s", "In Mul FU\t"));
@@ -1174,7 +1438,7 @@ public class ApexOOO {
 		System.out.println();
 	}
 
-	public void printRenameTable() {
+	private void printRenameTable() {
 		System.out.println("Registe Alias Table:");
 		char decide1, decide2;
 		decide1 = RATdecision[0] == 0 ? 'R' : 'P';
@@ -1191,8 +1455,7 @@ public class ApexOOO {
 		System.out.println("R3->" + decide1 + RAT.get(3) + "\t\tR7->" + decide2 + RAT.get(7));
 	}
 
-	public void printStages() {
-		System.out.println();
+	private void printStages() {
 		System.out.print(String.format("%10s", "In fetch\t"));
 		System.out.print(inFetch + "\n");
 		System.out.print(String.format("%10s", "In decode\t"));
@@ -1204,13 +1467,13 @@ public class ApexOOO {
 	}
 
 	// initializing processor. TODO copy over from constructor
-	public void processorInit() {
+	private void processorInit() {
 		System.out.println("===Processor initialized===");
 		GlobalPC = 20000;
 	}
 
 	// command line user interfacing- 4 functions
-	public void PrintMenuWithInit() {
+	private void PrintMenuWithInit() {
 		System.out.println("\nOptions:\n1:\tInitialize- initializes the processor to boot up state");
 		System.out.println("2:\tSimulate: Performs initialization and simulate n cycles.\n");
 		System.out.println("3.\tDisplay: Content of all memory and other relevant info.");
@@ -1252,7 +1515,7 @@ public class ApexOOO {
 		return input;
 	}
 
-	public int userInput(Scanner s) {
+	private int userInput(Scanner s) {
 		int input = s.nextInt();
 		switch (input) {
 
@@ -1274,7 +1537,7 @@ public class ApexOOO {
 	}
 
 	// converting input file into an Instruction[]
-	public void compileInstruction(Instruction instruction) throws Exception {
+	private void compileInstruction(Instruction instruction) throws Exception {
 		String d;
 		String string = instruction.rawString;
 		instruction.FUtype = 0;

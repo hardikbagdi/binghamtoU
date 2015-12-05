@@ -737,7 +737,7 @@ public class ApexOOO {
 						if ((loadStoreQueue[0].src2_data + loadStoreQueue[0].literal) != (loadStoreQueue[2].src1_data
 								+ loadStoreQueue[2].literal)) {
 							// can issue the instruction
-						System.err.println("0 says yes to 2");
+							System.err.println("0 says yes to 2");
 							yesFrom0to2 = true;
 						}
 						// address match and hence forward
@@ -759,9 +759,9 @@ public class ApexOOO {
 						// known
 					}
 
-				} 
-				
-				 if (loadStoreQueue[1].instr_id == InstructionType.STORE) {
+				}
+
+				if (loadStoreQueue[1].instr_id == InstructionType.STORE) {
 					System.err.println("checking for 2 , 1 is a STORE");
 					if (loadStoreQueue[1].src2valid) {
 						if ((loadStoreQueue[1].src2_data + loadStoreQueue[1].literal) != (loadStoreQueue[2].src1_data
@@ -790,8 +790,8 @@ public class ApexOOO {
 						// known
 					}
 
-				} 
-				 if (loadStoreQueue[0].instr_id == InstructionType.STORE
+				}
+				if (loadStoreQueue[0].instr_id == InstructionType.STORE
 						&& loadStoreQueue[1].instr_id == InstructionType.STORE) {
 					if (yesFrom0to2 && yesFrom1to2) {
 						toLSFU = loadStoreQueue[2];
@@ -1006,7 +1006,7 @@ public class ApexOOO {
 		inDecode = null;
 		Instruction instruction;
 
-		// TODO verify, flushing based on branchTag
+		// TODO verify, flushing based on branchTag from IQ and LSQ
 		while (conditionalInstruction.branchTag <= topBIS) {
 			for (int i = 0; i < 8; i++) {
 				// TODO code to flush LSQ also
@@ -1032,24 +1032,36 @@ public class ApexOOO {
 		topBIS = conditionalInstruction.branchTag;
 		System.err.println("Issue queue now is-");
 		printIssueQueue();
-		// TODO(verify) flush ROB for instructions with address greater than the
+		// TODO(verify) flush ROB for instructions with branchtag greater than
+		// the
 		// branch
 		// address
 
-		// TODO remove instructions from LSU,IntFU and MUL if they have
-		// instructions which have branchTags >= the mispredicted branch.
-
-		// TODO verify this logic, might introduce a bug
-		// cannot do the following , because the Branch instruction itself is in
-		// intFU
-		// if (inExIntFU.branchTag >= conditionalInstruction.branchTag)
-		// inExIntFU = null;
-
-		// TODO verify, pop BIS till you find the mis predicted branch
+		// verify this todo
+		// TODO remove instructions from LSU, and MUL if they have
+		// instructions which have branchTags >= the mis-predicted branch.
+		if (inExMulFU != null) {
+			if (inExMulFU.branchTag >= topBIS)
+				inExMulFU = null;
+		}
+		if (inEXLSFU != null) {
+			if (inEXLSFU.branchTag >= topBIS)
+				inEXLSFU = null;
+		}
+		if (inEXLSFU1 != null) {
+			if (inEXLSFU1.branchTag >= topBIS)
+				inEXLSFU1 = null;
+		}
+		if (inEXLSFU2 != null) {
+			if (inEXLSFU2.branchTag >= topBIS)
+				inEXLSFU2 = null;
+		}
+		// TODO verify, pop BIS till you find the mis-predicted branch
 		while (!BIS.isEmpty() && BIS.peek().branchTag > conditionalInstruction.branchTag) {
 			System.err.println(BIS.pop());
 		}
-		reInItRATandAllocatedList();// copy committed ARF to RAT. now we will
+		// copy committed ARF to RAT. now we will
+		reInItRATandAllocatedList();
 		// update. walk
 		// backwards(from head to tail)
 		// alternative3 in the notes.
@@ -1290,12 +1302,9 @@ public class ApexOOO {
 			}
 			// write to memory if it's a store instruction
 			if (retiring.instr_id == InstructionType.STORE) {
-				if (retiring.literal == -1) {
-					memory[retiring.src1_data + retiring.src2_data] = retiring.src1_data;
-				} else {
-					memory[retiring.src1_data + retiring.literal] = retiring.src1_data;
-				}
+				memory[retiring.src2_data + retiring.literal] = retiring.src1_data;
 			}
+
 			// if branch instruction then remove it from the BIS
 			if (retiring.instr_id == InstructionType.BZ || retiring.instr_id == InstructionType.BNZ) {
 				Instruction removed = BIS.remove(0);

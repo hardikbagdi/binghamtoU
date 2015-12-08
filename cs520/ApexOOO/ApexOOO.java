@@ -10,7 +10,8 @@ import java.util.Stack;
 import java.util.StringTokenizer;
 
 public class ApexOOO {
-	// minAgeinIQ- instructions spend atleaast one cycle in IQ
+	public static String filename;
+	// minAgeinIQ- instructions spend at least one cycle in IQ
 	private static final int minAgeInIQ = 2;
 	// CPU representations
 	private int PSW_Z = -1;
@@ -672,9 +673,11 @@ public class ApexOOO {
 
 					// just check the src2 bit of 0 to check address equality
 					if (loadStoreQueue[0].src2valid) {
+						System.err.println("checking for 1load 0store");
 						// check if the address is same. if not then execute OOO
-						if ((loadStoreQueue[1].src2_data + loadStoreQueue[1].literal) != (loadStoreQueue[0].src2_data
+						if ((loadStoreQueue[1].src1_data + loadStoreQueue[1].literal) != (loadStoreQueue[0].src2_data
 								+ loadStoreQueue[0].literal)) {
+							System.err.println("addressnot same");
 							toLSFU = loadStoreQueue[1];
 							loadStoreQueue[1].isLSissued = true;
 							return true;
@@ -1688,7 +1691,12 @@ public class ApexOOO {
 		String line;
 		int i = 0;
 		try {
-			br = new BufferedReader(new FileReader("asm.txt"));
+			if (filename != null) {
+				br = new BufferedReader(new FileReader(filename));
+				
+			} else {
+				br = new BufferedReader(new FileReader("asm.txt"));
+			}
 			while ((line = br.readLine()) != null) {
 				System.out.println(i + " " + line);
 				this.instructions[i].rawString = line;
@@ -1724,6 +1732,10 @@ public class ApexOOO {
 	}
 
 	public static void main(String[] args) {
+		if (args.length == 1){			
+			filename = args[0];
+			System.err.println(filename);
+		}
 		// err log file, add redirection when complete TODO
 		// try{
 		// PrintStream ps = new PrintStream("log");

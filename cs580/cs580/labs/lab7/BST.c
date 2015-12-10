@@ -44,7 +44,7 @@ void printTree(Tree* bst){
 
 
 void insertHelper(Node * current, Data value){
-	printf("inside inserthelper:%d\n",value.d);
+	//printf("inside inserthelper:%d\n",value.d);
 	Node *node;
 
 	if(current->data.d == value.d){
@@ -73,7 +73,7 @@ void insertHelper(Node * current, Data value){
 }
 
 void insertNode(Tree * bst, Data value){
-	printf("inside insert\n");
+	//printf("inside insert\n");
 	if(bst->root==NULL){
 		Node* r = createNode(value);
 		bst->root=r;
@@ -106,55 +106,87 @@ Node* searchTree(Tree * bst, Data value){
 	}
 }
 void removeLeaf(Node* node){
-	printf("\nin remove leaf\n");
+	printf("\nin remove leaf\n, ");
 	Node* parent = node->parent;
-	if(parent->left->data.d== node->data.d){
-	deleteNode(node);
-	parent->left=NULL;
-	}
-	else{
+	//only node in the tree
+	if(parent==NULL){
 		deleteNode(node);
-	parent->right=NULL;
+		return;
+	}
+	printf("parent is: %d",parent->data.d);
+	//check if the leaf node is the left or right child of it's parent
+	if(parent->left!=NULL){	
+		if(parent->left->data.d == node->data.d){
+	printf("\nin remove leaf left\n");
+			deleteNode(node);
+			parent->left=NULL;
+			return;
+		}
+	}
+	if(parent->right!=NULL){	
+		if(parent->right->data.d == node->data.d){
+	printf("\nin remove leaf right\n");
+			deleteNode(node);
+			parent->right=NULL;
+			return;
+		}
 	}
 }
 void shortCircuit(Node* node){
+	printf("\nin shortCircuit\n");
 	Node* parent = node->parent;
+	// if(parent==NULL){
+
+	// 	deleteNode(node);
+	// 	return;
+	// }
+
 	if(node->left != NULL){
-		if(parent->left->data.d == node->data.d){
+	printf("\nin shortCircuit  below left\n");
+		if(parent->left!=NULL &&  parent->left->data.d == node->data.d){
 			parent->left=node->left;
+			parent->left->parent=parent;
 			deleteNode(node);
 		}
 		else{
 			parent->right=node->left;
+			parent->right->parent=parent;
 			deleteNode(node);
 		}
+		return;
 	}
-	else if(node->right != NULL){
-		if(parent->left->data.d == node->data.d){
+	if(node->right != NULL){
+	printf("\nin shortCircuit  below right\n");
+		if(parent->left!=NULL && parent->left->data.d == node->data.d){
 			parent->left=node->right;
+			parent->left->parent=parent;
 			deleteNode(node);
 		}
 		else{
 			parent->right=node->right;
+			parent->right->parent=parent;
 			deleteNode(node);
 		}
+		return;	
 	}
-
 }
+
 void promotion(Node* node){
 	printf("\n in remove promotion.\n");
-	Node* parent = node->parent;
 	Node* current= node->left;
 	while(current->right!=NULL){
 		current=current->right;
 	}
 	node->data=current->data;
 	if(current->left == NULL && current->right == NULL){
-			removeLeaf(current);
-		}
-		else if(current->left == NULL || current->right==NULL){
-			shortCircuit(current);
-		}
+		printf("removing: %d\n", current->data.d);
+		removeLeaf(current);
+		return;
+	}
+	else if(current->left == NULL || current->right==NULL){
+		shortCircuit(current);
+		return;
+	}
 }
 
 void removeHelper(Node* current,Data value){
@@ -178,16 +210,60 @@ void removeHelper(Node* current,Data value){
 	}
 }
 
+void removeRootHelper(Tree* bst){
+	printf("\nin remove root\n");
+	Node* rootBackup = bst->root;
+	Node* current=NULL;
+	if(bst->root->left==NULL && bst->root->right==NULL){
+	printf("\nin remove root leaf\n");
+		deleteNode(bst->root);
+		bst->root=NULL;
+		return;
+	}
+	else if(bst->root->left!=NULL && bst->root->right!=NULL){
+	printf("\nin remove root promote\n");
+		current = bst->root->left;
+		while(current->right!=NULL){
+			current=current->right;
+		}
+		bst->root->data = current->data;
+		if(current->left == NULL && current->right == NULL){
+			removeLeaf(current);
+			return;
+		}
+		else if(current->left == NULL || current->right==NULL){
+			shortCircuit(current);
+			return;
+		}
+	}
+	else if(bst->root->left!=NULL){
+	printf("\nin remove root shortCircuit left\n");
+		bst->root = rootBackup->left;
+		deleteNode(rootBackup);
+	}
+	else if(bst->root->right!=NULL){
+	printf("\nin remove root shortCircuit right\n");
+		bst->root = rootBackup->right;
+		deleteNode(rootBackup);
+	}
+}
 void removeNode(Tree * bst, Data value){
 		printf("\n in remove.\n");
 	if(bst->root==NULL){
 		printf("\n Cannot   delete from an empty tree.\n");
+		return;
 	}
 	if(searchTree(bst,value)==NULL){
 		printf("\n Data to delete not present in tree.\n");
 	}
 	else{
-		removeHelper(bst->root,value);
+		if(bst->root->data.d == value.d){
+			removeRootHelper(bst);
+			return;
+		}
+		else{
+			removeHelper(bst->root,value);
+		}
 	}
 }
 Node* deleteTreeHelper(Node* current){
@@ -203,7 +279,7 @@ Node* deleteTreeHelper(Node* current){
 Tree* deleteTree(Tree* bst){
 	if(bst->root!=NULL){
 		deleteTreeHelper(bst->root);
-		free(bst);
 	}
+	free(bst);
 	return NULL;
 }

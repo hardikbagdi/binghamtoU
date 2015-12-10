@@ -2,77 +2,68 @@
 #include<stdio.h>
 #include<stdlib.h>
 
-
 int main(int argc, char const *argv[])
-{
-	Data value;
-	Data value1;
-	value.d = 5;
-	Tree* bst = createTree();
-	insertNode(bst,value);
-	value1.d = 3;
-	insertNode(bst,value1);
-	value.d = 4;
-	insertNode(bst,value);
-	value.d = 2;
-	insertNode(bst,value);
-	value.d = 1;
-	insertNode(bst,value);
-	value.d = 7;
-	insertNode(bst,value);
-	value.d = 6;
-	insertNode(bst,value);
-	value.d = 8;
-	insertNode(bst,value);
-	value.d = 9;
-	insertNode(bst,value);
+{	
+	FILE* file = fopen ("data.txt", "r");
+	int i = 0;
+	int a[100];
+	int count =0,userinput=0;
+	Data dx;
+	Tree *bst;
+	Node* node;
+	bst = createTree();
+	//inserting via file
+	while (!feof (file))
+	{  
+		fscanf (file, "%d", &i);      
+		a[count] =i;
+		count++;
+		dx.d = i;
+		insertNode(bst,dx);
+	}
+	fclose (file);        	
 	printTree(bst);
-	value.d=1;
-	Node* node = searchTree(bst,value);
-	if(node==NULL){
+	//search the tree
+	printf("\nEnter value to search(0 to exit)\n");
+	scanf("%d",&userinput);
+	dx.d = userinput;
+	while(userinput!=0){
+		node = searchTree(bst,dx);
+		if(node==NULL){
+			printf("\n Value not found\n");
+		}
+		else{
 
-		printf("\n Value not found\n");
+			printf("\n Value found: %d\n",node->data.d);
+			if(node->parent!=NULL)
+				printf("\n Parent of the node: %d\n",node->parent->data.d);
+			else
+				printf("\n Root node\n");
+			if(node->left!=NULL)
+				printf("\n Left Child of the node: %d\n",node->left->data.d);
+			else
+				printf("\n No left child");
+			if(node->right!=NULL)
+				printf("\n Right Child of the node: %d\n",node->right->data.d);
+			else
+				printf("\n No right child");
+		}
+		printf("\nEnter value to search(0 to exit)\n");
+		scanf("%d",&userinput);
+		dx.d = userinput;
 	}
-	else{
 
-		printf("\n Value found: %d\n",node->data.d);
-		printf("\n Parent of the node: %d\n",node->parent->data.d);
-		if(node->left!=NULL)
-			printf("\n Left Child of the node: %d\n",node->left->data.d);
-		else
-			printf("\n No left child");
-		if(node->right!=NULL)
-			printf("\n Right Child of the node: %d\n",node->right->data.d);
-		else
-			printf("\n No right child");
+	//removing node
+	printf("\nEnter value to delete(0 to exit)\n");
+	scanf("%d",&userinput);
+	dx.d = userinput;
+	while(userinput!=0){
+		removeNode(bst,dx);
+		printTree(bst);
+		printf("\nEnter value to delete(0 to exit)\n");
+		scanf("%d",&userinput);
+		dx.d = userinput;
 	}
-	removeNode(bst,value);
-	printTree(bst);
-	value.d=5;
-	removeNode(bst,value);
-	value.d=4;
-	node = searchTree(bst,value);
-	if(node==NULL){
-
-		printf("\n Value not found\n");
-	}
-	else{
-
-		printf("\n Value found: %d\n",node->data.d);
-		if(node->parent!=NULL)
-		printf("\n Parent of the node: %d\n",node->parent->data.d);
-		else
-			printf("\n Node has no root.\n");
-		if(node->left!=NULL)
-			printf("\n Left Child of the node: %d\n",node->left->data.d);
-		else
-			printf("\n No left child");
-		if(node->right!=NULL)
-			printf("\n Right Child of the node: %d\n",node->right->data.d);
-		else
-			printf("\n No right child");
-	}
-	printTree(bst);
 	deleteTree(bst);
 	return 0;
 }

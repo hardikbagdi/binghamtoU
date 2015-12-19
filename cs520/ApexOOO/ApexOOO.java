@@ -369,7 +369,7 @@ public class ApexOOO {
 			RAT.put(instruction.destination, x);
 			RATdecision[instruction.destination] = 1;
 			instruction.renamedDestination = x;
-
+			System.err.println("renaming destination for "+instruction);
 			sb.append("P" + instruction.renamedDestination);
 		}
 		if (instruction.src1 != -1) {
@@ -1294,7 +1294,7 @@ public class ApexOOO {
 				System.exit(0);
 			}
 			// write to ARF and update RAT if destination is present
-			if (retiring.destination != -1) {
+			if (retiring.destination != -1 && retiring.renamedDestination==RAT.get(retiring.destination) ){
 				System.err.println("Commiting PR:" + retiring.renamedDestination + " to ARF:" + retiring.destination);
 				register[retiring.destination] = -1;
 				ar_register[retiring.destination] = retiring.destination_data;

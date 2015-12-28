@@ -1,0 +1,54 @@
+%Hardik Bagdi B576043 (section 2)
+%Shashi Upadhyay B00627613 (section 1)
+
+%Problem 1 Helper function
+max2([],CurMax,CurMax).
+max2([H|T],CurMax,Max):- H > CurMax, max2(T,H, Max).
+max2([H|T],CurMax,Max) :- H== CurMax, max2(T,H,Max).
+max2([H|T],CurMax,Max):- H < CurMax,max2(T,CurMax,Max).
+
+%Problem1 Main function
+max([H|T],Res):- max2(T,H,Res).
+
+
+
+%Problem 2 Helper function
+insnth(_,_,[],[]).
+insnth(N,CurrentN,[H|T],[H|T1]) :- (CurrentN ==N -> insnth(N,1,T,T2),T1 = [1|T2]
+									;
+									CurN is CurrentN + 1, insnth(N,CurN,T,T1)
+									).
+
+%Problem 2 Main function
+insertNTerm(N,T,Res):- 
+T =.. [F|A],
+S is 1,
+insnth(N,S,A,L),
+Res=.. [F,L].
+
+
+%Problem 3 Helper function
+addHtoTsets([],_,Y,Y).
+addHtoTsets([CuurentSet|T],X,[[X|CuurentSet]|Sets],S) :-addHtoTsets(T,X,Sets,S).
+
+%Problem 3 Main function
+sublist([],[[]]).
+sublist([H|T],Allsets) :- sublist(T,AllsetsT), addHtoTsets(AllsetsT,H,Allsets,AllsetsT).
+
+
+%Problem 4 helper function
+position1(_,_,[],[]).
+position1(X,N,[H|T],L):- (X==H -> N1 is N+1,X is H, position1(X,N1,T,L1), L = [N|L1]
+;
+N1 is N+1,X is X, position1(X,N1,T,L1), L = L1).
+
+%Problem 4 Main Function
+position(X,L1,L2):- S is 1, position1(X,S,L1,L2).
+
+
+%Problem 5
+merge([],[],[]).
+merge([],T,T).
+merge(T,[],T).
+merge([H1|T1],[H2|T2],L):- (H1 < H2 -> merge(T1,[H2|T2],L2),L = [H1|L2] ; 
+merge([H1|T1],T2,L2),L = [H2|L2]).

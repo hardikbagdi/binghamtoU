@@ -1,0 +1,61 @@
+
+PL Assignment 5:
+
+Group Members
+1) 
+Name: Hardik Bagdi 
+Binghamton ID: B00576043 
+Section: CS 571-02 
+Email Address: hbagdi1@binghamton.edu
+
+2) 
+Name: Shashi Upadhyay 
+Binghamton ID: B00627613 
+Section: CS 571-01 
+Email Address: supadhy2@binghamton.edu
+
+Program is validated on Bingsuns.
+
+Input-Output format:
+1)
+Input format: max([1,3,5,4,2], Res).
+no of arguments: 2
+1-List and 2-one argument for output
+Output- integer.
+eg-
+Input:  max([1,3,5,4,2], Res).Output: 5
+
+2)
+Input format: insertNTerm(3,f(2,3,4,5,6,7,8),Res).
+no of arguments: 3
+1-Nth argument, 2-Term, 3-Output
+Output- Term.
+eg-
+Input: insertNTerm(3,f(2,3,4,5,6,7,8),Res).Output: f(2,3,4,1,5,6,7,1,8).
+
+3)
+Input format: sublist([1,2],Res).
+no of arguments: 2
+1-List and one argument for output
+Output- list of list
+eg-
+Input:sublist([1,2,3],Res).Output: [[1, 2, 3], [1, 2], [1, 3], [1], [2, 3], [2], [3], []]
+
+4)
+Input format: position(1, [1,3,1,2,5,1], Res).
+no of arguments: 3
+1-Nth argument, 2-Term, 3-Output
+Output- list containing the positions of the term
+eg-
+Input: position(1, [1,3,1,2,5,1], Res).Output: [1, 3, 6]
+
+5)
+merge([1,3,4,6],[2,3,5],Res).
+no of arguments: 3
+1-Sorted List 1
+2-Sorted List 2
+3-Res containing elements of List 1 and List 2 in sorted in ascending order. 
+Output- A list.
+eg-
+Input: merge([1,3,4,6],[2,3,5],Res).Output: [1, 2, 3, 3, 4, 5, 6]
+

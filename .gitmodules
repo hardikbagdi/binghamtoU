@@ -4,3 +4,6 @@
 [submodule "cs575"]
 	path = cs575
 	url = https://github.com/hardikbagdi/cs575
+[submodule "cs542"]
+	path = cs542
+	url = https://github.com/hardikbagdi/cs542
